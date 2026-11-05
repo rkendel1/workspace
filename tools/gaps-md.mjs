@@ -18,8 +18,9 @@ for (const g of reg.gaps) {
   md.push(...field("Components", g.components), ...field("Description", g.description), ...field("Evidence", g.evidence));
   md.push(...field("What the developer wanted", g.wanted), ...field("What the platform provides", g.provided), ...field("Implemented manually", g.implementedManually));
   md.push(...field("Workaround", g.workaround), ...field("Custom LOC attributable", g.customLoc), ...field("Engineering time attributable", g.estimatedHours));
-  md.push(...field("If the platform provided it", g.codeFate), ...field("Proposed change", g.proposal), ...field("Architectural owner", g.owner));
+  md.push(...field("Kind of code", g.codeKind ?? "—"), ...field("If the platform provided it", g.codeFate), ...field("Proposed change", g.proposal), ...field("Architectural owner", g.owner));
   md.push(...field("Dependencies", g.dependencies.length ? g.dependencies.join(", ") : "none"));
 }
+if (reg.accounting) md.splice(8, 0, `**Gap-to-code accounting:** ${reg.accounting.attributedToGaps}. ${reg.accounting.wouldDisappear}. Method: ${reg.accounting.method}.`, "");
 writeFileSync(new URL("../FELTKIT_GAP_REGISTER.md", import.meta.url), md.join("\n"));
 console.log(`FELTKIT_GAP_REGISTER.md: ${reg.gaps.length} gaps`);

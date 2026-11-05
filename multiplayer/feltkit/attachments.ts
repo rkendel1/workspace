@@ -1,7 +1,7 @@
 import { fail, s } from "@feltdb/feltkit";
 import { app, attachments } from "./app.js";
 import { requireChannel } from "./_authz.js";
-import { fromBase64, toBase64 } from "./_util.js";
+import { fromBase64, toBase64 } from "./_base64.js";
 
 /**
  * Files: AppPort Services Files stores the bytes (with checksum and audit) in this app's FeltDB

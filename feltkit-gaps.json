@@ -47,15 +47,16 @@
       "provided": "Role/permission checks at every boundary; ctx.auth.require(permission) inside handlers.",
       "implementedManually": "feltkit/_authz.ts: loads the target record from the id the client sent, resolves the caller's participant and membership, and refuses NOT_FOUND/FORBIDDEN. Called at the top of every handler that takes an id.",
       "workaround": "Centralized helper module called explicitly by each handler; transport-independent (runs inside the function, so HTTP, AppPort and MCP calls all pass through it).",
-      "customLoc": "measured in the build report (multiplayer/feltkit/_authz.ts plus one call per handler)",
-      "estimatedHours": "2-3 (hook design in app) — see report",
+      "customLoc": "51 (feltkit/_authz.ts) + 43 call sites in handlers = ~94 code lines. Of these ~20 lines of plumbing (load record → resolve workspace → find membership) and the 43 call sites would disappear; ~30 lines of membership policy are application-specific and would relocate into the registered authorizer.",
+      "estimatedHours": "2–3 h (design + every handler + 9 security tests' worth of cases)",
       "codeFate": "Relocates, does not disappear: membership policy is application-specific and would move from handler preambles into one registered authorizer. The per-handler calls and the duplicated 'load record → find workspace' plumbing disappear; denials gain AppPort decision ids and activity evidence.",
       "proposal": "feltkit({ authorize: Authorizer | (req: { principal, function, capability, input, db }) => Decision }) composed after the role authorizer with combineAuthorizers, given a read-only db handle on the same instance, applied identically at HTTP, AppPort, MCP and Services boundaries, and recorded like role denials. Per-function opt-in: app.query({ access, resource: (args) => ({ type: 'channel', id: args.channelId }) }).",
       "owner": "FeltKit (exposes AppPort's existing Authorizer composition); AppPort unchanged",
       "dependencies": [],
       "severity": "high",
       "priority": "P1",
-      "status": "open (workaround in app)"
+      "status": "open (workaround in app)",
+      "codeKind": "platform integration glue (call sites, plumbing) + application policy (rules)"
     },
     {
       "id": "FK-GAP-002",
@@ -87,7 +88,8 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "open"
+      "status": "open",
+      "codeKind": "—"
     },
     {
       "id": "FK-GAP-003",
@@ -107,8 +109,8 @@
       "provided": "Accounts, sessions, application-wide roles.",
       "implementedManually": "workspaces, memberships, invitations collections and their functions.",
       "workaround": "Application collections.",
-      "customLoc": "measured in report (data model + invitations/workspaces modules)",
-      "estimatedHours": "see report",
+      "customLoc": "~147: memberships + invitations collections (~25), invitations.ts (75), workspaces setRole/removeMember (33), _ops addToWorkspace/joinChannel (14). Roughly 110 are reusable tenancy mechanics (membership, role-in-tenant, invitation lifecycle); ~35 are workspace semantics that stay.",
+      "estimatedHours": "3–4 h",
       "codeFate": "Partly application-specific (what a workspace is), partly reusable (membership, role-in-tenant, invitation lifecycle). A primitive would remove the reusable part.",
       "proposal": "Optional `app.tenancy({ collection, roles })` primitive: membership + invitation records and a `ctx.tenant` resolved per call, feeding FK-GAP-001.",
       "owner": "FeltKit (or AuthBoundry, if it owns tenancy)",
@@ -117,7 +119,8 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "open (workaround in app)"
+      "status": "open (workaround in app)",
+      "codeKind": "mostly reusable mechanics; partly application-specific"
     },
     {
       "id": "FK-GAP-004",
@@ -138,8 +141,8 @@
       "provided": "Durable writes + live queries.",
       "implementedManually": "presence collection: one overwritten record per (workspace, participant), heartbeat and typing mutations; client-side expiry.",
       "workaround": "Bounded durable record (never grows), so delivery works on every FeltKit target including AppBoundry without a second transport. Cost: each heartbeat/keystroke burst is a FeltDB commit and an activity entry, and every client watching presence re-queries.",
-      "customLoc": "measured in report (presence.ts + client hooks)",
-      "estimatedHours": "see report",
+      "customLoc": "~55: presence.ts (19), presence collection (~8), presence fields in workspaces:get (~6), client heartbeat/typing/expiry in Workspace.tsx (22). ~40 would disappear with an ephemeral channel; the UI rendering stays.",
+      "estimatedHours": "1.5 h",
       "codeFate": "Mostly disappears: a platform `ctx.ephemeral.publish(topic, value, { ttl })` with authorized subscription would replace the collection, heartbeat mutation and expiry logic; the UI stays.",
       "proposal": "An authorized ephemeral channel on the existing /api/events stream: publish(topic, payload, ttl) from functions, subscribe(topic) from clients, topics authorized by FK-GAP-001's hook; never written to FeltDB.",
       "owner": "FeltKit (server + client); AppBoundry host interface for parity",
@@ -148,7 +151,8 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "open (workaround in app)"
+      "status": "open (workaround in app)",
+      "codeKind": "platform integration glue (workaround)"
     },
     {
       "id": "FK-GAP-005",
@@ -177,7 +181,8 @@
       "dependencies": [],
       "severity": "medium",
       "priority": "P2",
-      "status": "open"
+      "status": "open",
+      "codeKind": "—"
     },
     {
       "id": "FK-GAP-006",
@@ -197,15 +202,16 @@
       "provided": "Equality/range queries.",
       "implementedManually": "messages:search scans the workspace's messages, filters by readable channels and a case-insensitive substring match.",
       "workaround": "Bounded scan in the handler (O(messages in workspace)).",
-      "customLoc": "measured in report (search handler)",
-      "estimatedHours": "see report",
+      "customLoc": "~18 (messages:search). ~10 (scan + match) would disappear with an indexed text predicate; readable-channel filtering stays.",
+      "estimatedHours": "0.5 h",
       "codeFate": "Filtering by readable channels stays (authorization); the scan and matching would disappear with an indexed text predicate.",
       "proposal": "A `contains`/`prefix` predicate and an optional text index declaration in app.collection(..., { search: ['text'] }).",
       "owner": "FeltDB (index), FeltKit (exposure)",
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "open (workaround in app)"
+      "status": "open (workaround in app)",
+      "codeKind": "workaround"
     },
     {
       "id": "FK-GAP-007",
@@ -227,8 +233,8 @@
       "provided": "Files service: upload/list/get/read/remove with metadata, authorized by app-wide permission.",
       "implementedManually": "attachments collection binding fileId → channel; upload/download functions with membership checks; base64 transfer.",
       "workaround": "Bind in app; transfer base64 through functions (1 MiB cap).",
-      "customLoc": "measured in report",
-      "estimatedHours": "see report",
+      "customLoc": "~78: _base64.ts (23), attachments.ts (38), attachments collection (~12), client base64/Blob conversions (~5). ~30 (base64 transfer) disappear with a signed file route; the channel binding (~45) is application semantics and stays.",
+      "estimatedHours": "1.5 h",
       "codeFate": "Binding record stays (it's app semantics); base64 plumbing disappears with a signed download URL; the authorization moves into FK-GAP-001's hook if Files consulted it.",
       "proposal": "Files: authorize reads through the app's resource authorizer (metadata-based), and a signed, short-lived download/upload URL issued by a function.",
       "owner": "AppPort Services (authorization by metadata, signed URLs); FeltKit (route)",
@@ -237,7 +243,8 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "open (workaround in app)"
+      "status": "open (workaround in app)",
+      "codeKind": "glue (transfer) + application semantics (binding)"
     },
     {
       "id": "FK-GAP-008",
@@ -259,15 +266,16 @@
       "provided": "Agent sessions (feltkit session create --type agent), capabilities over AppPort/MCP, the change stream.",
       "implementedManually": "agentRequests queue (durable), agent:* capabilities (pending/claim/context/respond), and an external worker process (agent/room-agent.ts) authenticated with an agent session.",
       "workaround": "External worker adapter. Durable queue makes it crash-safe; the worker holds no state.",
-      "customLoc": "measured in report",
-      "estimatedHours": "see report",
+      "customLoc": "~133: agentRequests collection (~17), agents.ts queue functions pending/claim/failRequest/requests (50), mention→request in messages:send (~8), agent/worker.ts (31), agent/room-agent.ts (27). ~110 would disappear with platform agent triggers; agent/compose.ts (69) is the agent's behaviour and stays.",
+      "estimatedHours": "3 h",
       "codeFate": "Queue/claim/lease plumbing disappears with a platform 'agent trigger' (run handler X as principal P when event E). The agent's behaviour (compose summary/plan) stays application code.",
       "proposal": "app.agent('assistant', { principal, roles, on: 'messages.mention', handler }) executed by FeltKit's runtime (and AppBoundry's) as the agent principal, with at-least-once delivery and leases.",
       "owner": "FeltKit + AppBoundry (execution); FeltDB agent state",
       "dependencies": [],
       "severity": "high",
       "priority": "P1",
-      "status": "open (workaround in app)"
+      "status": "open (workaround in app)",
+      "codeKind": "platform integration glue (adapter + queue)"
     },
     {
       "id": "FK-GAP-009",
@@ -279,7 +287,7 @@
         "rkendel1/appboundry (docs/feltkit-deploy-readiness.md)",
         "rkendel1/feltkit (feltkit deploy --target appboundry)"
       ],
-      "description": "The FeltKit → AppBoundry deploy contract is implemented and tested locally on both sides but explicitly not deployed: routing/TLS not implemented (address null), customer execution gated off (verified-runtime policy empty), no deploy token issued.",
+      "description": "The FeltKit → AppBoundry deploy contract is implemented and tested locally on both sides but explicitly not deployed: routing/TLS not implemented (address null), customer execution gated off (verified-runtime policy empty), no deploy token issued. Note: this is about the managed (Hetzner) target. Building and running an AppBoundry application locally is available both through FeltKit and, without FeltKit, through `npx appport add` (FK-GAP-015).",
       "evidence": [
         "appboundry docs/feltkit-deploy-readiness.md: 'Nothing here is deployed'; Routing 'designed, not implemented'; 'Untrusted execution in production: not ready'",
         "feltkit docs/APPBOUNDRY-DEPLOY-CONTRACT.md: 'not deployed'",
@@ -291,15 +299,16 @@
       "provided": "feltkit build --target appboundry (artifact) and @appport/appboundry run (local runtime).",
       "implementedManually": "deploy/verify-appboundry.sh: builds the artifact and verifies it on the published runtime @appport/appboundry@1.8.0 (8/8 browser checks, restart recovery). No substitute hosting was provisioned.",
       "workaround": "Build the artifact and verify it on the published AppBoundry runtime locally; no invented deployment.",
-      "customLoc": "0",
-      "estimatedHours": "0",
+      "customLoc": "52 (deploy/verify-appboundry.sh 40 + deploy/check-persisted.ts 12) — verification, not a substitute deployment",
+      "estimatedHours": "1 h (investigation + verification script)",
       "codeFate": "n/a",
       "proposal": "Ship AppBoundry routing (§18), pin a verified runtime, issue a scoped deploy token.",
       "owner": "AppBoundry",
       "dependencies": [],
       "severity": "high",
       "priority": "P1",
-      "status": "blocking deployment acceptance"
+      "status": "blocking deployment acceptance",
+      "codeKind": "verification tooling"
     },
     {
       "id": "FK-GAP-010",
@@ -320,15 +329,16 @@
       "provided": "Record ids (48 random bits). Sessions/API keys exist but are for principals, not app-level links.",
       "implementedManually": "Invitation = record id used as the code; single use, 7-day expiry, revocable, audited.",
       "workaround": "Accepted 48-bit codes, documented as a known limitation; mitigated by expiry, single use and revocation (no rate limiting).",
-      "customLoc": "0 extra (limitation accepted)",
-      "estimatedHours": "0.5 (investigation)",
+      "customLoc": "0 (limitation accepted)",
+      "estimatedHours": "0.5 h",
       "codeFate": "Invitation code generation would become one platform call; the invitation lifecycle stays app code.",
       "proposal": "ctx.crypto.token(bytes=32) (host-provided CSPRNG in both runtimes), or a platform 'link token' primitive: issue/verify/revoke a signed, expiring, single-use token bound to a record.",
       "owner": "FeltKit + AppBoundry host ABI",
       "dependencies": [],
       "severity": "medium",
       "priority": "P2",
-      "status": "open (limitation documented)"
+      "status": "open (limitation documented)",
+      "codeKind": "—"
     },
     {
       "id": "FK-GAP-011",
@@ -349,14 +359,15 @@
       "implementedManually": "Nothing (accepted).",
       "workaround": "None.",
       "customLoc": "0",
-      "estimatedHours": "0.25 (diagnosis)",
+      "estimatedHours": "0.25 h",
       "codeFate": "n/a",
       "proposal": "Reset the backoff and reconnect on window 'online' and on visibilitychange→visible.",
       "owner": "FeltKit client",
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "open"
+      "status": "open",
+      "codeKind": "—"
     },
     {
       "id": "FK-GAP-012",
@@ -375,15 +386,16 @@
       "provided": "Clear error; s.doc(collection) helps for stored records.",
       "implementedManually": "Return schemas for agent.pending/claim/context/fail and plans.get (~15 lines).",
       "workaround": "Write the schemas.",
-      "customLoc": "~15",
-      "estimatedHours": "0.25",
+      "customLoc": "~15 (return schemas for 5 capabilities)",
+      "estimatedHours": "0.25 h",
       "codeFate": "Would shrink if returns could be derived from collection docs plus picks automatically; the contract itself should stay explicit.",
       "proposal": "None required; optionally a codegen hint that drafts the schema from the handler's inferred type.",
       "owner": "FeltKit",
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "accepted (by design)"
+      "status": "accepted (by design)",
+      "codeKind": "contract (by design)"
     },
     {
       "id": "FK-GAP-013",
@@ -405,8 +417,8 @@
       "provided": "Operator-provisioned users and sessions (AppBoundry admin CLI).",
       "implementedManually": "Nothing in the app; deployment script provisions identities by hand.",
       "workaround": "Operator issues sessions; the app's SessionForm (from the starter) accepts a pasted session.",
-      "customLoc": "0 app code (~10 lines of deployment script)",
-      "estimatedHours": "0.5",
+      "customLoc": "0 app code; ~10 lines in deploy/verify-appboundry.sh provision users and sessions",
+      "estimatedHours": "0.5 h",
       "codeFate": "n/a",
       "proposal": "AppBoundry: implement the accounts interface FeltKit's manifest declares (or delegate to AuthBoundry), so auth.accounts behaves the same on both runtimes; feltkit build should warn when the target cannot honour auth.accounts.",
       "owner": "AppBoundry (identity host interface); AuthBoundry as the eventual identity owner",
@@ -415,7 +427,8 @@
       ],
       "severity": "high",
       "priority": "P1",
-      "status": "open (blocks self-serve onboarding on the approved target)"
+      "status": "open (blocks self-serve onboarding on the approved target)",
+      "codeKind": "deployment glue"
     },
     {
       "id": "FK-GAP-014",
@@ -444,7 +457,79 @@
       "dependencies": [],
       "severity": "medium",
       "priority": "P2",
+      "status": "open",
+      "codeKind": "—"
+    },
+    {
+      "id": "FK-GAP-015",
+      "discovered": "2026-11-05",
+      "title": "Two AppBoundry artifact formats and runtime paths: repository bundles (appport add) and FeltKit artifacts are not interchangeable",
+      "category": "missing-integration",
+      "layer": "architecture",
+      "components": [
+        "rkendel1/appboundry (@appport/appboundry 1.8.0)",
+        "appport CLI 1.3.0",
+        "rkendel1/feltkit (feltkit build --target appboundry)"
+      ],
+      "description": "Any repository can become an AppBoundry application without FeltKit: `npx appport add` generates a contract, boundary and WASM crate; `npx appport app package` writes `<name>.app` (protocol AppPort/application-bundle/1: application.wasm + manifest), which `appboundry app install` and `appport app start` run (examples/todos: WASM execution units, external durable FeltDB state). FeltKit instead emits format appboundry.app/1 (manifest.json + module.wasm + assets), which `appboundry run` / `artifact verify` serve and which the FeltKit→AppBoundry deploy contract ships. `appboundry artifact verify` refuses the repository bundle (ARTIFACT_MANIFEST_MISSING). Two packaging contracts, two runtime entry points and two capability manifests for one control plane.",
+      "evidence": [
+        "/tmp test 2026-11-05: npx appport add → 'Standalone AppPort setup complete', WASM sha256:ddde2a4e…; npx appport app package → multiplayer-direct.app (application.wasm, manifest: protocol AppPort/application-bundle/1)",
+        "appboundry artifact verify multiplayer-direct.app → 'error ARTIFACT_MANIFEST_MISSING: … has no manifest.json' (same for examples/todos/todos.app)",
+        "appboundry app install multiplayer-direct.app → 'Installed com.example.multiplayerdirect'",
+        "appport app start ./todos.app → 'Execution unit: exec_… Durable state: state_… (external)'",
+        "appboundry docs/contracts/feltkit-deploy/CONTRACT.md: the managed deploy contract is defined for the FeltKit artifact"
+      ],
+      "wanted": "One artifact contract that any producer (FeltKit, appport add in any language) emits and every AppBoundry runtime path (local run, install, Hetzner agent) accepts.",
+      "provided": "Both paths work separately.",
+      "implementedManually": "Nothing (finding from the direct-stack comparison).",
+      "workaround": "Use the FeltKit artifact path for this app.",
+      "customLoc": "0",
+      "estimatedHours": "1 (investigation)",
+      "codeKind": "—",
+      "codeFate": "n/a",
+      "proposal": "Converge on one AppBoundry artifact contract (or make each runtime path accept both with one verifier), and make the managed deploy contract producer-neutral so `appport add` applications deploy the same way FeltKit ones do.",
+      "owner": "AppBoundry (artifact contract); AppPort (packager); FeltKit (producer)",
+      "dependencies": [
+        "FK-GAP-009"
+      ],
+      "severity": "medium",
+      "priority": "P2",
+      "status": "open"
+    },
+    {
+      "id": "FK-GAP-016",
+      "discovered": "2026-11-05",
+      "title": "`npx appport add` is interactive-only and needs a Rust wasm32 toolchain",
+      "category": "developer-experience",
+      "layer": "dx",
+      "components": [
+        "appport CLI 1.3.0"
+      ],
+      "description": "`appport add` asks for the application and each capability on a TTY. Piped stdin ends the run ('Detected unsettled top-level await', exit 13) because each prompt opens a new reader; no flags or file input were discoverable (`appport add --help` prints the top-level help). The WASM build then needs `rustup target add wasm32-unknown-unknown`; the CLI says so clearly and resumes without repeating setup.",
+      "evidence": [
+        "printf answers | npx appport add → exits after 'Application ID' prompt with 'Warning: Detected unsettled top-level await'",
+        "driving prompts one at a time (tools: /tmp drive-add.cjs) completes; 'error The generated boundary is ready, but the WASM toolchain could not build it. Install Rust and the target…'"
+      ],
+      "wanted": "Scripted, reproducible onboarding (CI, agents).",
+      "provided": "Interactive prompts; clear resume message.",
+      "implementedManually": "A small prompt driver for the comparison experiment (not part of the app).",
+      "workaround": "Answer prompts one by one.",
+      "customLoc": "0 (app)",
+      "estimatedHours": "0.5",
+      "codeKind": "—",
+      "codeFate": "n/a",
+      "proposal": "`appport add --non-interactive --name … --capability name:in:out:perm` or `--from contract.json`; document the Rust requirement up front.",
+      "owner": "AppPort CLI",
+      "dependencies": [],
+      "severity": "low",
+      "priority": "P3",
       "status": "open"
     }
-  ]
+  ],
+  "accounting": {
+    "customTotal": 2507,
+    "attributedToGaps": "≈550 code lines (≈22% of custom code); the attributions overlap slightly (FK-GAP-001 call sites sit inside modules also attributed to FK-GAP-003/007/008), deduplicated ≈520",
+    "wouldDisappear": "≈370 code lines (≈15%) if FK-GAP-001, -003, -004, -006, -007, -008 were closed; the rest relocates or is application semantics",
+    "method": "cloc 2.00 on each file (tools/measure.mjs); function-level counts by non-blank, non-comment lines of the named exports"
+  }
 }

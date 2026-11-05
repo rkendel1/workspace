@@ -6,7 +6,9 @@ Project: Multiplayer (rkendel1/workspace, multiplayer/). Platform: @feltdb/feltk
 
 Platform source revisions read: rkendel1/feltkit@50bc617, rkendel1/appboundry@94502ef, rkendel1/appport@e9815a5, rkendel1/authboundry@b8ed659, rkendel1/appport-services@ac20b5a.
 
-**14 gaps.** By classification: missing-extension-point 2, missing-capability 7, unsupported-requirement 1, developer-experience 2, missing-integration 2. By priority: P1 4, P2 7, P3 3.
+**Gap-to-code accounting:** ≈550 code lines (≈22% of custom code); the attributions overlap slightly (FK-GAP-001 call sites sit inside modules also attributed to FK-GAP-003/007/008), deduplicated ≈520. ≈370 code lines (≈15%) if FK-GAP-001, -003, -004, -006, -007, -008 were closed; the rest relocates or is application semantics. Method: cloc 2.00 on each file (tools/measure.mjs); function-level counts by non-blank, non-comment lines of the named exports.
+
+**16 gaps.** By classification: missing-extension-point 2, missing-capability 7, unsupported-requirement 1, developer-experience 3, missing-integration 3. By priority: P1 4, P2 8, P3 4.
 
 Classifications: `missing-capability`, `missing-integration`, `missing-extension-point`, `developer-experience`, `documentation`, `unsupported-requirement`, `application-specific`. `application-specific` entries are recorded so they are *not* counted as platform overhead.
 
@@ -26,6 +28,8 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 | [FK-GAP-012](#fk-gap-012) | Capabilities require hand-written output schemas even when the handler's return type is known | developer-experience | dx | low | P3 | FeltKit | accepted (by design) |
 | [FK-GAP-013](#fk-gap-013) | FeltKit built-in accounts (sign-up / sign-in) are not available when the artifact runs on AppBoundry | missing-integration | integration | high | P1 | AppBoundry (identity host interface); AuthBoundry as the eventual identity owner | open (blocks self-serve onboarding on the approved target) |
 | [FK-GAP-014](#fk-gap-014) | MCP endpoint (and Studio) are not part of the artifact; agents on AppBoundry use HTTP only | missing-integration | integration | medium | P2 | AppBoundry (web interface); AppPort (MCP transport) | open |
+| [FK-GAP-015](#fk-gap-015) | Two AppBoundry artifact formats and runtime paths: repository bundles (appport add) and FeltKit artifacts are not interchangeable | missing-integration | architecture | medium | P2 | AppBoundry (artifact contract); AppPort (packager); FeltKit (producer) | open |
+| [FK-GAP-016](#fk-gap-016) | `npx appport add` is interactive-only and needs a Rust wasm32 toolchain | developer-experience | dx | low | P3 | AppPort CLI | open |
 
 ## FK-GAP-001
 
@@ -55,9 +59,11 @@ Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 
 
 **Workaround:** Centralized helper module called explicitly by each handler; transport-independent (runs inside the function, so HTTP, AppPort and MCP calls all pass through it).
 
-**Custom LOC attributable:** measured in the build report (multiplayer/feltkit/_authz.ts plus one call per handler)
+**Custom LOC attributable:** 51 (feltkit/_authz.ts) + 43 call sites in handlers = ~94 code lines. Of these ~20 lines of plumbing (load record → resolve workspace → find membership) and the 43 call sites would disappear; ~30 lines of membership policy are application-specific and would relocate into the registered authorizer.
 
-**Engineering time attributable:** 2-3 (hook design in app) — see report
+**Engineering time attributable:** 2–3 h (design + every handler + 9 security tests' worth of cases)
+
+**Kind of code:** platform integration glue (call sites, plumbing) + application policy (rules)
 
 **If the platform provided it:** Relocates, does not disappear: membership policy is application-specific and would move from handler preambles into one registered authorizer. The per-handler calls and the duplicated 'load record → find workspace' plumbing disappear; denials gain AppPort decision ids and activity evidence.
 
@@ -98,6 +104,8 @@ Discovered 2026-11-05 · missing-capability · integration · severity medium ·
 
 **Engineering time attributable:** shared with FK-GAP-001
 
+**Kind of code:** —
+
 **If the platform provided it:** Would move membership records and policy to AuthBoundry; requires FK-GAP-001's hook as the integration point.
 
 **Proposed change:** AuthBoundry: evaluate `resource` against tenant membership/relationship policy. FeltKit: an AuthBoundry Authorizer adapter plugged in through FK-GAP-001's hook.
@@ -131,9 +139,11 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **Workaround:** Application collections.
 
-**Custom LOC attributable:** measured in report (data model + invitations/workspaces modules)
+**Custom LOC attributable:** ~147: memberships + invitations collections (~25), invitations.ts (75), workspaces setRole/removeMember (33), _ops addToWorkspace/joinChannel (14). Roughly 110 are reusable tenancy mechanics (membership, role-in-tenant, invitation lifecycle); ~35 are workspace semantics that stay.
 
-**Engineering time attributable:** see report
+**Engineering time attributable:** 3–4 h
+
+**Kind of code:** mostly reusable mechanics; partly application-specific
 
 **If the platform provided it:** Partly application-specific (what a workspace is), partly reusable (membership, role-in-tenant, invitation lifecycle). A primitive would remove the reusable part.
 
@@ -169,9 +179,11 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **Workaround:** Bounded durable record (never grows), so delivery works on every FeltKit target including AppBoundry without a second transport. Cost: each heartbeat/keystroke burst is a FeltDB commit and an activity entry, and every client watching presence re-queries.
 
-**Custom LOC attributable:** measured in report (presence.ts + client hooks)
+**Custom LOC attributable:** ~55: presence.ts (19), presence collection (~8), presence fields in workspaces:get (~6), client heartbeat/typing/expiry in Workspace.tsx (22). ~40 would disappear with an ephemeral channel; the UI rendering stays.
 
-**Engineering time attributable:** see report
+**Engineering time attributable:** 1.5 h
+
+**Kind of code:** platform integration glue (workaround)
 
 **If the platform provided it:** Mostly disappears: a platform `ctx.ephemeral.publish(topic, value, { ttl })` with authorized subscription would replace the collection, heartbeat mutation and expiry logic; the UI stays.
 
@@ -211,6 +223,8 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **Engineering time attributable:** 0
 
+**Kind of code:** —
+
 **If the platform provided it:** n/a
 
 **Proposed change:** Carry equality predicates (collection + indexed field values) in the change event and in a query's recorded reads, so watchQuery matches on (collection, channelId).
@@ -244,9 +258,11 @@ Discovered 2026-11-05 · missing-capability · primitive · severity low · P3 �
 
 **Workaround:** Bounded scan in the handler (O(messages in workspace)).
 
-**Custom LOC attributable:** measured in report (search handler)
+**Custom LOC attributable:** ~18 (messages:search). ~10 (scan + match) would disappear with an indexed text predicate; readable-channel filtering stays.
 
-**Engineering time attributable:** see report
+**Engineering time attributable:** 0.5 h
+
+**Kind of code:** workaround
 
 **If the platform provided it:** Filtering by readable channels stays (authorization); the scan and matching would disappear with an indexed text predicate.
 
@@ -283,9 +299,11 @@ Discovered 2026-11-05 · missing-extension-point · integration · severity medi
 
 **Workaround:** Bind in app; transfer base64 through functions (1 MiB cap).
 
-**Custom LOC attributable:** measured in report
+**Custom LOC attributable:** ~78: _base64.ts (23), attachments.ts (38), attachments collection (~12), client base64/Blob conversions (~5). ~30 (base64 transfer) disappear with a signed file route; the channel binding (~45) is application semantics and stays.
 
-**Engineering time attributable:** see report
+**Engineering time attributable:** 1.5 h
+
+**Kind of code:** glue (transfer) + application semantics (binding)
 
 **If the platform provided it:** Binding record stays (it's app semantics); base64 plumbing disappears with a signed download URL; the authorization moves into FK-GAP-001's hook if Files consulted it.
 
@@ -322,9 +340,11 @@ Discovered 2026-11-05 · missing-capability · primitive · severity high · P1 
 
 **Workaround:** External worker adapter. Durable queue makes it crash-safe; the worker holds no state.
 
-**Custom LOC attributable:** measured in report
+**Custom LOC attributable:** ~133: agentRequests collection (~17), agents.ts queue functions pending/claim/failRequest/requests (50), mention→request in messages:send (~8), agent/worker.ts (31), agent/room-agent.ts (27). ~110 would disappear with platform agent triggers; agent/compose.ts (69) is the agent's behaviour and stays.
 
-**Engineering time attributable:** see report
+**Engineering time attributable:** 3 h
+
+**Kind of code:** platform integration glue (adapter + queue)
 
 **If the platform provided it:** Queue/claim/lease plumbing disappears with a platform 'agent trigger' (run handler X as principal P when event E). The agent's behaviour (compose summary/plan) stays application code.
 
@@ -345,7 +365,7 @@ Discovered 2026-11-05 · unsupported-requirement · deployment · severity high 
 - rkendel1/appboundry (docs/feltkit-deploy-readiness.md)
 - rkendel1/feltkit (feltkit deploy --target appboundry)
 
-**Description:** The FeltKit → AppBoundry deploy contract is implemented and tested locally on both sides but explicitly not deployed: routing/TLS not implemented (address null), customer execution gated off (verified-runtime policy empty), no deploy token issued.
+**Description:** The FeltKit → AppBoundry deploy contract is implemented and tested locally on both sides but explicitly not deployed: routing/TLS not implemented (address null), customer execution gated off (verified-runtime policy empty), no deploy token issued. Note: this is about the managed (Hetzner) target. Building and running an AppBoundry application locally is available both through FeltKit and, without FeltKit, through `npx appport add` (FK-GAP-015).
 
 **Evidence:**
 
@@ -363,9 +383,11 @@ Discovered 2026-11-05 · unsupported-requirement · deployment · severity high 
 
 **Workaround:** Build the artifact and verify it on the published AppBoundry runtime locally; no invented deployment.
 
-**Custom LOC attributable:** 0
+**Custom LOC attributable:** 52 (deploy/verify-appboundry.sh 40 + deploy/check-persisted.ts 12) — verification, not a substitute deployment
 
-**Engineering time attributable:** 0
+**Engineering time attributable:** 1 h (investigation + verification script)
+
+**Kind of code:** verification tooling
 
 **If the platform provided it:** n/a
 
@@ -401,9 +423,11 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **Workaround:** Accepted 48-bit codes, documented as a known limitation; mitigated by expiry, single use and revocation (no rate limiting).
 
-**Custom LOC attributable:** 0 extra (limitation accepted)
+**Custom LOC attributable:** 0 (limitation accepted)
 
-**Engineering time attributable:** 0.5 (investigation)
+**Engineering time attributable:** 0.5 h
+
+**Kind of code:** —
 
 **If the platform provided it:** Invitation code generation would become one platform call; the invitation lifecycle stays app code.
 
@@ -440,7 +464,9 @@ Discovered 2026-11-05 · developer-experience · client · severity low · P3 ·
 
 **Custom LOC attributable:** 0
 
-**Engineering time attributable:** 0.25 (diagnosis)
+**Engineering time attributable:** 0.25 h
+
+**Kind of code:** —
 
 **If the platform provided it:** n/a
 
@@ -474,9 +500,11 @@ Discovered 2026-11-05 · developer-experience · dx · severity low · P3 · acc
 
 **Workaround:** Write the schemas.
 
-**Custom LOC attributable:** ~15
+**Custom LOC attributable:** ~15 (return schemas for 5 capabilities)
 
-**Engineering time attributable:** 0.25
+**Engineering time attributable:** 0.25 h
+
+**Kind of code:** contract (by design)
 
 **If the platform provided it:** Would shrink if returns could be derived from collection docs plus picks automatically; the contract itself should stay explicit.
 
@@ -513,9 +541,11 @@ Discovered 2026-11-05 · missing-integration · integration · severity high · 
 
 **Workaround:** Operator issues sessions; the app's SessionForm (from the starter) accepts a pasted session.
 
-**Custom LOC attributable:** 0 app code (~10 lines of deployment script)
+**Custom LOC attributable:** 0 app code; ~10 lines in deploy/verify-appboundry.sh provision users and sessions
 
-**Engineering time attributable:** 0.5
+**Engineering time attributable:** 0.5 h
+
+**Kind of code:** deployment glue
 
 **If the platform provided it:** n/a
 
@@ -555,10 +585,95 @@ Discovered 2026-11-05 · missing-integration · integration · severity medium �
 
 **Engineering time attributable:** 0
 
+**Kind of code:** —
+
 **If the platform provided it:** n/a
 
 **Proposed change:** AppBoundry serves /appport and /mcp from the manifest's AppPort contract (the capability set is already in manifest.json).
 
 **Architectural owner:** AppBoundry (web interface); AppPort (MCP transport)
+
+**Dependencies:** none
+
+## FK-GAP-015
+
+### Two AppBoundry artifact formats and runtime paths: repository bundles (appport add) and FeltKit artifacts are not interchangeable
+
+Discovered 2026-11-05 · missing-integration · architecture · severity medium · P2 · open
+
+**Components:**
+
+- rkendel1/appboundry (@appport/appboundry 1.8.0)
+- appport CLI 1.3.0
+- rkendel1/feltkit (feltkit build --target appboundry)
+
+**Description:** Any repository can become an AppBoundry application without FeltKit: `npx appport add` generates a contract, boundary and WASM crate; `npx appport app package` writes `<name>.app` (protocol AppPort/application-bundle/1: application.wasm + manifest), which `appboundry app install` and `appport app start` run (examples/todos: WASM execution units, external durable FeltDB state). FeltKit instead emits format appboundry.app/1 (manifest.json + module.wasm + assets), which `appboundry run` / `artifact verify` serve and which the FeltKit→AppBoundry deploy contract ships. `appboundry artifact verify` refuses the repository bundle (ARTIFACT_MANIFEST_MISSING). Two packaging contracts, two runtime entry points and two capability manifests for one control plane.
+
+**Evidence:**
+
+- /tmp test 2026-11-05: npx appport add → 'Standalone AppPort setup complete', WASM sha256:ddde2a4e…; npx appport app package → multiplayer-direct.app (application.wasm, manifest: protocol AppPort/application-bundle/1)
+- appboundry artifact verify multiplayer-direct.app → 'error ARTIFACT_MANIFEST_MISSING: … has no manifest.json' (same for examples/todos/todos.app)
+- appboundry app install multiplayer-direct.app → 'Installed com.example.multiplayerdirect'
+- appport app start ./todos.app → 'Execution unit: exec_… Durable state: state_… (external)'
+- appboundry docs/contracts/feltkit-deploy/CONTRACT.md: the managed deploy contract is defined for the FeltKit artifact
+
+**What the developer wanted:** One artifact contract that any producer (FeltKit, appport add in any language) emits and every AppBoundry runtime path (local run, install, Hetzner agent) accepts.
+
+**What the platform provides:** Both paths work separately.
+
+**Implemented manually:** Nothing (finding from the direct-stack comparison).
+
+**Workaround:** Use the FeltKit artifact path for this app.
+
+**Custom LOC attributable:** 0
+
+**Engineering time attributable:** 1 (investigation)
+
+**Kind of code:** —
+
+**If the platform provided it:** n/a
+
+**Proposed change:** Converge on one AppBoundry artifact contract (or make each runtime path accept both with one verifier), and make the managed deploy contract producer-neutral so `appport add` applications deploy the same way FeltKit ones do.
+
+**Architectural owner:** AppBoundry (artifact contract); AppPort (packager); FeltKit (producer)
+
+**Dependencies:** FK-GAP-009
+
+## FK-GAP-016
+
+### `npx appport add` is interactive-only and needs a Rust wasm32 toolchain
+
+Discovered 2026-11-05 · developer-experience · dx · severity low · P3 · open
+
+**Components:**
+
+- appport CLI 1.3.0
+
+**Description:** `appport add` asks for the application and each capability on a TTY. Piped stdin ends the run ('Detected unsettled top-level await', exit 13) because each prompt opens a new reader; no flags or file input were discoverable (`appport add --help` prints the top-level help). The WASM build then needs `rustup target add wasm32-unknown-unknown`; the CLI says so clearly and resumes without repeating setup.
+
+**Evidence:**
+
+- printf answers | npx appport add → exits after 'Application ID' prompt with 'Warning: Detected unsettled top-level await'
+- driving prompts one at a time (tools: /tmp drive-add.cjs) completes; 'error The generated boundary is ready, but the WASM toolchain could not build it. Install Rust and the target…'
+
+**What the developer wanted:** Scripted, reproducible onboarding (CI, agents).
+
+**What the platform provides:** Interactive prompts; clear resume message.
+
+**Implemented manually:** A small prompt driver for the comparison experiment (not part of the app).
+
+**Workaround:** Answer prompts one by one.
+
+**Custom LOC attributable:** 0 (app)
+
+**Engineering time attributable:** 0.5
+
+**Kind of code:** —
+
+**If the platform provided it:** n/a
+
+**Proposed change:** `appport add --non-interactive --name … --capability name:in:out:perm` or `--from contract.json`; document the Rust requirement up front.
+
+**Architectural owner:** AppPort CLI
 
 **Dependencies:** none

@@ -98,7 +98,7 @@ test("upload an attachment, send it, download it", async () => {
     assert.equal((await grace.query(api.attachments.list, { channelId: general })).length, 1);
     // The Files service holds the bytes; message records hold only the reference.
     if (t.runtime) {
-      const stored = await t.runtime.instance.handle("test").collection<any>("messages").find({});
+      const stored = await t.runtime.instance.handle("test").collection("messages").find({});
       assert.ok(!JSON.stringify(stored).includes(base64));
     }
   } finally { await t.close(); }

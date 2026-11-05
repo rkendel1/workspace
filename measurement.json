@@ -1,0 +1,99 @@
+{
+  "measuredAt": "2026-11-05T01:37:04.451Z",
+  "tool": "2.00",
+  "commit": "ec21923",
+  "categories": {
+    "Custom application code": {
+      "files": 17,
+      "code": 2164,
+      "comment": 99,
+      "blank": 163
+    },
+    "Custom data-model code": {
+      "files": 1,
+      "code": 140,
+      "comment": 22,
+      "blank": 20
+    },
+    "Custom authorization code": {
+      "files": 1,
+      "code": 51,
+      "comment": 17,
+      "blank": 8
+    },
+    "Custom real-time code": {
+      "files": 1,
+      "code": 19,
+      "comment": 5,
+      "blank": 1
+    },
+    "Custom integration code": {
+      "files": 5,
+      "code": 133,
+      "comment": 29,
+      "blank": 15
+    },
+    "Configuration": {
+      "files": 5,
+      "code": 92,
+      "comment": 17,
+      "blank": 4
+    },
+    "Tests": {
+      "files": 5,
+      "code": 651,
+      "comment": 41,
+      "blank": 44
+    },
+    "Generated code": {
+      "files": 1,
+      "code": 14,
+      "comment": 3,
+      "blank": 1
+    },
+    "Starter code kept (create-feltkit)": {
+      "files": 5,
+      "code": 266,
+      "comment": 24,
+      "blank": 15
+    }
+  },
+  "customTotal": 2507,
+  "appCodeShareOfCustom": 86.3,
+  "authzCallSites": 43,
+  "realtimeClientLines": 22,
+  "unitTests": 18,
+  "e2eChecks": 24,
+  "starterBaseline": {
+    "files": 15,
+    "code": 1129,
+    "comment": 78,
+    "blank": 79
+  },
+  "framework": {
+    "FeltKit SDK (packages/sdk/src)": {
+      "files": 80,
+      "code": 18708,
+      "comment": 3636,
+      "blank": 1624
+    },
+    "FeltKit Studio dashboard (packages/sdk/dashboard/src)": {
+      "files": 24,
+      "code": 5000,
+      "comment": 222,
+      "blank": 211
+    },
+    "AppPort Services (src)": {
+      "files": 83,
+      "code": 10378,
+      "comment": 1473,
+      "blank": 1184
+    },
+    "AppBoundry host (packages/appboundry-host/src)": {
+      "files": 24,
+      "code": 5172,
+      "comment": 778,
+      "blank": 464
+    }
+  }
+}
