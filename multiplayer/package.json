@@ -4,6 +4,15 @@
   "version": "0.1.0",
   "description": "Multiplayer: an open-source, real-time workspace for people and AI agents, built on FeltKit.",
   "license": "MIT",
+  "author": "Boundry (https://boundry.company)",
+  "homepage": "https://getfeltkit.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rkendel1/multiplayer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rkendel1/multiplayer/issues"
+  },
   "keywords": [
     "feltkit",
     "starter",

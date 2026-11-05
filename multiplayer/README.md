@@ -1,6 +1,6 @@
 # Multiplayer
 
-**A real-time workspace for people and AI agents. It is an open-source starter built on [FeltKit](https://www.npmjs.com/package/@feltdb/feltkit).**
+**A real-time workspace for people and AI agents. It is an open-source starter built on [FeltKit](https://getfeltkit.com), by [Boundry](https://boundry.company).**
 
 Multiplayer covers what a team chat product needs:
 - **Workspaces:** public and private channels, direct and group messages.
@@ -139,6 +139,11 @@ Screenshots are written to `e2e/screenshots/`.
 - **Data.** Add a collection with `{ tenant: { field: "workspaceId" } }` and it is scoped to the workspace with no extra code.
 - **Agent.** Give the agent a model in `compose`, or add agents with `app.agent`.
 
+## About
+
+Multiplayer is made by [Boundry](https://boundry.company), the company behind [FeltKit](https://getfeltkit.com).
+Questions and contributions are welcome at [github.com/rkendel1/multiplayer](https://github.com/rkendel1/multiplayer).
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Boundry
