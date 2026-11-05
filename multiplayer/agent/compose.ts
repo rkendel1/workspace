@@ -67,7 +67,7 @@ export const composeDeterministic: Composer = (ctx) => {
   }
   const topic = ctx.channel.kind === "public" || ctx.channel.kind === "private" ? `#${ctx.channel.name}` : "this conversation";
   const summary = discussion.length
-    ? `${people.length} ${people.length === 1 ? "person" : "people"} (${people.join(", ")}) discussed ${ctx.channel.topic ? ctx.channel.topic.toLowerCase() : topic} across ${discussion.length} messages. ` +
+    ? `${people.length} ${people.length === 1 ? "person" : "people"} (${people.join(", ")}) discussed ${ctx.channel.topic ? `“${ctx.channel.topic}”` : topic} across ${discussion.length} messages. ` +
       `${decisions.length} decision${decisions.length === 1 ? "" : "s"}, ${tasks.length} action item${tasks.length === 1 ? "" : "s"}, ${risks.length} risk${risks.length === 1 ? "" : "s"} and ${openQuestions.length} open question${openQuestions.length === 1 ? "" : "s"}.`
     : "There is nothing in this conversation to summarize yet.";
 

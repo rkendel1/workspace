@@ -6,7 +6,7 @@ Project: Multiplayer (rkendel1/workspace, multiplayer/). Platform: @feltdb/feltk
 
 Platform source revisions read: rkendel1/feltkit@50bc617, rkendel1/appboundry@94502ef, rkendel1/appport@e9815a5, rkendel1/authboundry@b8ed659, rkendel1/appport-services@ac20b5a.
 
-**10 gaps.** By classification: missing-extension-point 2, missing-capability 7, unsupported-requirement 1. By priority: P1 3, P2 6, P3 1.
+**12 gaps.** By classification: missing-extension-point 2, missing-capability 7, unsupported-requirement 1, developer-experience 2. By priority: P1 3, P2 6, P3 3.
 
 Classifications: `missing-capability`, `missing-integration`, `missing-extension-point`, `developer-experience`, `documentation`, `unsupported-requirement`, `application-specific`. `application-specific` entries are recorded so they are *not* counted as platform overhead.
 
@@ -22,6 +22,8 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 | [FK-GAP-008](#fk-gap-008) | No hosted, event-triggered execution for application agents | missing-capability | primitive | high | P1 | FeltKit + AppBoundry (execution); FeltDB agent state | open (workaround in app) |
 | [FK-GAP-009](#fk-gap-009) | AppBoundry deployment (Hetzner) is not available to an application | unsupported-requirement | deployment | high | P1 | AppBoundry | blocking deployment acceptance |
 | [FK-GAP-010](#fk-gap-010) | No secure token / random primitive for application bearer secrets | missing-capability | primitive | medium | P2 | FeltKit + AppBoundry host ABI | open (limitation documented) |
+| [FK-GAP-011](#fk-gap-011) | Client reconnect waits out exponential backoff (up to 10 s) after the network returns | developer-experience | client | low | P3 | FeltKit client | open |
+| [FK-GAP-012](#fk-gap-012) | Capabilities require hand-written output schemas even when the handler's return type is known | developer-experience | dx | low | P3 | FeltKit | accepted (by design) |
 
 ## FK-GAP-001
 
@@ -404,5 +406,78 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 **Proposed change:** ctx.crypto.token(bytes=32) (host-provided CSPRNG in both runtimes), or a platform 'link token' primitive: issue/verify/revoke a signed, expiring, single-use token bound to a record.
 
 **Architectural owner:** FeltKit + AppBoundry host ABI
+
+**Dependencies:** none
+
+## FK-GAP-011
+
+### Client reconnect waits out exponential backoff (up to 10 s) after the network returns
+
+Discovered 2026-11-05 · developer-experience · client · severity low · P3 · open
+
+**Components:**
+
+- rkendel1/feltkit (packages/sdk/src/client/index.ts #connect)
+
+**Description:** After a network loss the change stream retries with backoff 0.5 s → 10 s and does not listen for the browser's online event, so a client that comes back online can wait up to ~10 s (measured 6.4–16 s in e2e) before re-querying. Durable recovery itself is correct: on reconnect every query re-runs.
+
+**Evidence:**
+
+- client/index.ts #connect: delay = Math.min(delay * 2, 10_000); no 'online' listener
+- docs/screenshots/evidence.json: 'reconnection: offline session catches up' 6415 ms and 15963 ms in two runs
+
+**What the developer wanted:** Catch up within ~1 s of the network returning.
+
+**What the platform provides:** Correct but slow catch-up.
+
+**Implemented manually:** Nothing (accepted).
+
+**Workaround:** None.
+
+**Custom LOC attributable:** 0
+
+**Engineering time attributable:** 0.25 (diagnosis)
+
+**If the platform provided it:** n/a
+
+**Proposed change:** Reset the backoff and reconnect on window 'online' and on visibilitychange→visible.
+
+**Architectural owner:** FeltKit client
+
+**Dependencies:** none
+
+## FK-GAP-012
+
+### Capabilities require hand-written output schemas even when the handler's return type is known
+
+Discovered 2026-11-05 · developer-experience · dx · severity low · P3 · accepted (by design)
+
+**Components:**
+
+- rkendel1/feltkit (runtime/loader.ts)
+
+**Description:** Publishing a function as an AppPort capability requires `returns`; the loader refuses otherwise ('needs a returns schema: AppPort publishes and enforces its output contract'). This is a deliberate, correct contract rule with a clear error, but the schema restates what the TypeScript handler already returns. Classified as DX, not a defect.
+
+**Evidence:**
+
+- FeltKitError CONFIGURATION: Capability "agent.pending" needs a `returns` schema
+
+**What the developer wanted:** Publish agent.* capabilities.
+
+**What the platform provides:** Clear error; s.doc(collection) helps for stored records.
+
+**Implemented manually:** Return schemas for agent.pending/claim/context/fail and plans.get (~15 lines).
+
+**Workaround:** Write the schemas.
+
+**Custom LOC attributable:** ~15
+
+**Engineering time attributable:** 0.25
+
+**If the platform provided it:** Would shrink if returns could be derived from collection docs plus picks automatically; the contract itself should stay explicit.
+
+**Proposed change:** None required; optionally a codegen hint that drafts the schema from the handler's inferred type.
+
+**Architectural owner:** FeltKit
 
 **Dependencies:** none

@@ -1,0 +1,116 @@
+{
+  "base": "http://localhost:3000",
+  "at": "2026-11-05T01:30:28.689Z",
+  "passed": 16,
+  "failed": 0,
+  "results": [
+    {
+      "name": "ada signs in and opens a fresh sample workspace",
+      "ok": true,
+      "ms": 1351
+    },
+    {
+      "name": "ada invites grace (invitation link)",
+      "ok": true,
+      "ms": 320,
+      "detail": {
+        "link": "http://localhost:3000/?invite=<code>"
+      }
+    },
+    {
+      "name": "grace accepts in an independent session",
+      "ok": true,
+      "ms": 527
+    },
+    {
+      "name": "real-time message delivery (no refresh)",
+      "ok": true,
+      "ms": 100,
+      "detail": {
+        "latencyMs": 100
+      }
+    },
+    {
+      "name": "typing indicator",
+      "ok": true,
+      "ms": 789,
+      "detail": {
+        "latencyMs": 598
+      }
+    },
+    {
+      "name": "presence: grace shows active in ada's member list",
+      "ok": true,
+      "ms": 235
+    },
+    {
+      "name": "presence: going offline is reflected",
+      "ok": true,
+      "ms": 100
+    },
+    {
+      "name": "reactions propagate",
+      "ok": true,
+      "ms": 135,
+      "detail": {
+        "latencyMs": 54
+      }
+    },
+    {
+      "name": "thread replies propagate",
+      "ok": true,
+      "ms": 480,
+      "detail": {
+        "latencyMs": 111
+      }
+    },
+    {
+      "name": "unread counts update live",
+      "ok": true,
+      "ms": 66,
+      "detail": {
+        "latencyMs": 41,
+        "before": "#random2"
+      }
+    },
+    {
+      "name": "membership change: grace is added to a new private channel live",
+      "ok": true,
+      "ms": 356,
+      "detail": {
+        "latencyMs": 60
+      }
+    },
+    {
+      "name": "agent: mention, plan persisted, reply visible to both sessions",
+      "ok": true,
+      "ms": 984,
+      "detail": {
+        "agentRoundTripMs": 192
+      }
+    },
+    {
+      "name": "reconnection: offline session catches up from durable state",
+      "ok": true,
+      "ms": 15963,
+      "detail": {
+        "catchUpAfterReconnectMs": 12846
+      }
+    },
+    {
+      "name": "durable recovery: a fresh page load shows the authoritative state",
+      "ok": true,
+      "ms": 154
+    },
+    {
+      "name": "side-by-side screenshot of both sessions",
+      "ok": true,
+      "ms": 1243
+    },
+    {
+      "name": "light/dark/mobile screenshots",
+      "ok": true,
+      "ms": 2367
+    }
+  ]
+}

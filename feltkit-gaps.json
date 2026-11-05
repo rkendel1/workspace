@@ -327,6 +327,61 @@
       "severity": "medium",
       "priority": "P2",
       "status": "open (limitation documented)"
+    },
+    {
+      "id": "FK-GAP-011",
+      "discovered": "2026-11-05",
+      "title": "Client reconnect waits out exponential backoff (up to 10 s) after the network returns",
+      "category": "developer-experience",
+      "layer": "client",
+      "components": [
+        "rkendel1/feltkit (packages/sdk/src/client/index.ts #connect)"
+      ],
+      "description": "After a network loss the change stream retries with backoff 0.5 s → 10 s and does not listen for the browser's online event, so a client that comes back online can wait up to ~10 s (measured 6.4–16 s in e2e) before re-querying. Durable recovery itself is correct: on reconnect every query re-runs.",
+      "evidence": [
+        "client/index.ts #connect: delay = Math.min(delay * 2, 10_000); no 'online' listener",
+        "docs/screenshots/evidence.json: 'reconnection: offline session catches up' 6415 ms and 15963 ms in two runs"
+      ],
+      "wanted": "Catch up within ~1 s of the network returning.",
+      "provided": "Correct but slow catch-up.",
+      "implementedManually": "Nothing (accepted).",
+      "workaround": "None.",
+      "customLoc": "0",
+      "estimatedHours": "0.25 (diagnosis)",
+      "codeFate": "n/a",
+      "proposal": "Reset the backoff and reconnect on window 'online' and on visibilitychange→visible.",
+      "owner": "FeltKit client",
+      "dependencies": [],
+      "severity": "low",
+      "priority": "P3",
+      "status": "open"
+    },
+    {
+      "id": "FK-GAP-012",
+      "discovered": "2026-11-05",
+      "title": "Capabilities require hand-written output schemas even when the handler's return type is known",
+      "category": "developer-experience",
+      "layer": "dx",
+      "components": [
+        "rkendel1/feltkit (runtime/loader.ts)"
+      ],
+      "description": "Publishing a function as an AppPort capability requires `returns`; the loader refuses otherwise ('needs a returns schema: AppPort publishes and enforces its output contract'). This is a deliberate, correct contract rule with a clear error, but the schema restates what the TypeScript handler already returns. Classified as DX, not a defect.",
+      "evidence": [
+        "FeltKitError CONFIGURATION: Capability \"agent.pending\" needs a `returns` schema"
+      ],
+      "wanted": "Publish agent.* capabilities.",
+      "provided": "Clear error; s.doc(collection) helps for stored records.",
+      "implementedManually": "Return schemas for agent.pending/claim/context/fail and plans.get (~15 lines).",
+      "workaround": "Write the schemas.",
+      "customLoc": "~15",
+      "estimatedHours": "0.25",
+      "codeFate": "Would shrink if returns could be derived from collection docs plus picks automatically; the contract itself should stay explicit.",
+      "proposal": "None required; optionally a codegen hint that drafts the schema from the handler's inferred type.",
+      "owner": "FeltKit",
+      "dependencies": [],
+      "severity": "low",
+      "priority": "P3",
+      "status": "accepted (by design)"
     }
   ]
 }
