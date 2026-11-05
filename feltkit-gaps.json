@@ -129,7 +129,7 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "open — FeltKit integration point now exists (feltkit({ authorize })); AuthBoundry resource evaluation still missing",
+      "status": "superseded (2026-11-05 decision) — the wanted outcome (tenant membership and per-resource decisions on the server) is delivered natively by FeltKit (auth.tenant, tenant-scoped collections, the authorize hook; PR #65). The proposed AuthBoundry adapter would make FeltKit depend at runtime on a hosted AuthBoundry service, which the Phase 2 constraints rule out (\"FeltKit must remain self-contained\"). Delegation for agents acting for a person moves to the agent workstream (AuthBoundry contract implemented in FeltKit, FELTKIT_AUTH_AGENT_STACK_AUDIT.md §5.3). AuthBoundry evaluating `resource` in enforce() remains AuthBoundry's own item.",
       "codeKind": "—"
     },
     {
@@ -160,7 +160,7 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "open — reassigned to AuthBoundry; FeltKit side now available (authorize hook)",
+      "status": "closed in FeltKit — tenancy primitive (auth.tenant: tenants, memberships, invitations, switching, tenant-scoped collections, typed claims), merged in rkendel1/feltkit PR #65; merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration.",
       "codeKind": "mostly reusable mechanics; partly application-specific",
       "ownershipEvidence": "authboundry docs/PHASE_PRODUCT_12_CUSTOMER_IDENTITY_TENANT_LIFECYCLE.md: 'Use AuthBoundry's delegation model for customer-to-organization membership, not a separate RBAC system.' A FeltKit tenancy store would duplicate it."
     },
@@ -193,7 +193,7 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "implemented across AppPort, FeltKit and AppBoundry (local branches); Multiplayer adoption blocked on the AppPort release",
+      "status": "closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05).",
       "codeKind": "platform integration glue (workaround)",
       "resolution": {
         "date": "2026-11-05",
@@ -305,7 +305,7 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "implemented in FeltKit (branch claude/file-links, local, not pushed); Multiplayer adoption awaits release",
+      "status": "closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration.",
       "codeKind": "glue (transfer) + application semantics (binding)",
       "ownershipEvidence": "AppPort Services Files passes only { owner } as resource attributes to the authorizer (src/files/service.ts), not the file's metadata, so no policy can decide by the resource a file belongs to. Owner of that change: AppPort Services; the transfer route (signed download/upload) is FeltKit's.",
       "resolution": {
@@ -384,7 +384,7 @@
       "dependencies": [],
       "severity": "high",
       "priority": "P1",
-      "status": "blocking deployment acceptance",
+      "status": "blocked (not actionable under current constraints) — needs Hetzner deployment, which is excluded (\"No Hetzner contact or deployment\"). Owner: AppBoundry / operator.",
       "codeKind": "verification tooling"
     },
     {
@@ -471,7 +471,7 @@
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "implemented (FeltKit 40ba4ad, local); awaiting review/release; Multiplayer e2e catch-up to be re-measured on release",
+      "status": "closed in code — merged (FeltKit PR #62); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05).",
       "codeKind": "—",
       "resolution": {
         "date": "2026-11-05",
@@ -637,7 +637,7 @@
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "closed in code (AppBoundry 5b1e311, local): the gap was smaller than recorded",
+      "status": "closed — released (appport CLI 1.4.0: add --help, refusal without a terminal).",
       "resolution": {
         "date": "2026-11-05",
         "finding": "appport add already accepted every answer as a flag (--name, --id, --version, --description, --capability, --input, --output, --authorization) and completes without a terminal (verified with appport 1.3.1, stdin closed, exit 0). The real defects: undocumented (appport add --help printed the generic help, exit 1) and, without a terminal and without flags, a crash on an unsettled await.",
@@ -709,7 +709,7 @@
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "implemented (AppPort 81ba58f + FeltKit 3abc1bd, local); awaiting review/release",
+      "status": "closed — AppPort NOT_FOUND denials released (@appport/authorization 1.1.0, server 1.3.0); FeltKit side merged (PR #62); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05).",
       "resolution": {
         "date": "2026-11-05",
         "implemented": [
@@ -735,7 +735,7 @@
         "feltkit suite on sdk 1.5.0: 18 failures, 'node_modules/@appport/core/dist/execution-barrier.js:11: node:fs is a Node API'",
         "with the fix overlaid: 397/397"
       ],
-      "status": "fixed in AppPort (66a7874, local) with a portability test over core's import graph; needs core 1.6.1",
+      "status": "closed — released (@appport/core 1.7.0, portability test).",
       "owner": "AppPort",
       "severity": "high",
       "priority": "P1",
@@ -764,7 +764,7 @@
         "packages/server/test/subscriptions.test.ts 'per connection' failed before: first connection received []",
         "FeltKit events test: the first subscriber after boot never received"
       ],
-      "status": "fixed in AppPort (ada9157, local); needs a server release",
+      "status": "closed — released (@appport/server 1.3.0, per-connection subscriptions); FeltKit also gives each subscription a unique bus id (main 626bccf).",
       "owner": "AppPort",
       "severity": "high",
       "priority": "P1",
@@ -792,7 +792,7 @@
       "evidence": [
         "npm ls in feltkit: @appport/resolver-client@0.2.0 → @appport/sdk@1.4.0 → core 1.4.0 / server 1.1.5"
       ],
-      "status": "fixed in rkendel1/resolver (c61fe14, local; tests 173 passed/9 skipped, unchanged); needs a release",
+      "status": "closed — merged (rkendel1/resolver PR #11).",
       "owner": "Resolver",
       "severity": "medium",
       "priority": "P2",

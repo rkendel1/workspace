@@ -15,26 +15,26 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 | ID | Title | Classification | Layer | Severity | Priority | Owner | Status |
 |---|---|---|---|---|---|---|---|
 | [FK-GAP-001](#fk-gap-001) | No application-supplied, input-aware authorization hook in FeltKit | missing-extension-point | hook | high | P1 | FeltKit (exposes AppPort's existing Authorizer composition); AppPort unchanged | closed — released in @feltdb/feltkit 0.3.16; adopted by Multiplayer (workaround removed) |
-| [FK-GAP-002](#fk-gap-002) | AuthBoundry has no resource-level evaluation, and FeltKit has no AuthBoundry adapter | missing-capability | integration | medium | P2 | AuthBoundry (evaluation); FeltKit (adapter) | open — FeltKit integration point now exists (feltkit({ authorize })); AuthBoundry resource evaluation still missing |
-| [FK-GAP-003](#fk-gap-003) | No tenancy / membership primitive | missing-capability | primitive | medium | P2 | AuthBoundry (membership as delegation), with FeltKit integration through FK-GAP-001/002 — not a FeltKit membership store | open — reassigned to AuthBoundry; FeltKit side now available (authorize hook) |
-| [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events) | implemented across AppPort, FeltKit and AppBoundry (local branches); Multiplayer adoption blocked on the AppPort release |
+| [FK-GAP-002](#fk-gap-002) | AuthBoundry has no resource-level evaluation, and FeltKit has no AuthBoundry adapter | missing-capability | integration | medium | P2 | AuthBoundry (evaluation); FeltKit (adapter) | superseded (2026-11-05 decision) — the wanted outcome (tenant membership and per-resource decisions on the server) is delivered natively by FeltKit (auth.tenant, tenant-scoped collections, the authorize hook; PR #65). The proposed AuthBoundry adapter would make FeltKit depend at runtime on a hosted AuthBoundry service, which the Phase 2 constraints rule out ("FeltKit must remain self-contained"). Delegation for agents acting for a person moves to the agent workstream (AuthBoundry contract implemented in FeltKit, FELTKIT_AUTH_AGENT_STACK_AUDIT.md §5.3). AuthBoundry evaluating `resource` in enforce() remains AuthBoundry's own item. |
+| [FK-GAP-003](#fk-gap-003) | No tenancy / membership primitive | missing-capability | primitive | medium | P2 | AuthBoundry (membership as delegation), with FeltKit integration through FK-GAP-001/002 — not a FeltKit membership store | closed in FeltKit — tenancy primitive (auth.tenant: tenants, memberships, invitations, switching, tenant-scoped collections, typed claims), merged in rkendel1/feltkit PR #65; merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration. |
+| [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events) | closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). |
 | [FK-GAP-005](#fk-gap-005) | Live-query invalidation is per collection, not per query predicate | missing-capability | primitive | medium | P2 | FeltKit (change feed); FeltDB (F7 change listener naming keys) | open |
 | [FK-GAP-006](#fk-gap-006) | No text search / contains operator in ctx.db.query | missing-capability | primitive | low | P3 | FeltDB (index), FeltKit (exposure) | open (workaround in app) |
-| [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | implemented in FeltKit (branch claude/file-links, local, not pushed); Multiplayer adoption awaits release |
+| [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration. |
 | [FK-GAP-008](#fk-gap-008) | No hosted, event-triggered execution for application agents | missing-capability | primitive | high | P1 | FeltKit + AppBoundry (execution); FeltDB agent state | open (workaround in app) |
-| [FK-GAP-009](#fk-gap-009) | AppBoundry deployment (Hetzner) is not available to an application | unsupported-requirement | deployment | high | P1 | AppBoundry | blocking deployment acceptance |
+| [FK-GAP-009](#fk-gap-009) | AppBoundry deployment (Hetzner) is not available to an application | unsupported-requirement | deployment | high | P1 | AppBoundry | blocked (not actionable under current constraints) — needs Hetzner deployment, which is excluded ("No Hetzner contact or deployment"). Owner: AppBoundry / operator. |
 | [FK-GAP-010](#fk-gap-010) | No secure token / random primitive for application bearer secrets | missing-capability | primitive | medium | P2 | FeltKit (ctx.crypto) + AppBoundry (host interface crypto@1) — each in its own repository | closed — released in @feltdb/feltkit 0.3.16 and @appport/appboundry 1.9.0 (crypto@1); adopted by Multiplayer (workaround removed) |
-| [FK-GAP-011](#fk-gap-011) | Client reconnect waits out exponential backoff (up to 10 s) after the network returns | developer-experience | client | low | P3 | FeltKit client | implemented (FeltKit 40ba4ad, local); awaiting review/release; Multiplayer e2e catch-up to be re-measured on release |
+| [FK-GAP-011](#fk-gap-011) | Client reconnect waits out exponential backoff (up to 10 s) after the network returns | developer-experience | client | low | P3 | FeltKit client | closed in code — merged (FeltKit PR #62); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). |
 | [FK-GAP-012](#fk-gap-012) | Capabilities require hand-written output schemas even when the handler's return type is known | developer-experience | dx | low | P3 | FeltKit | accepted (by design) |
 | [FK-GAP-013](#fk-gap-013) | FeltKit built-in accounts (sign-up / sign-in) are not available when the artifact runs on AppBoundry | missing-integration | integration | high | P1 | AppBoundry (identity host interface); AuthBoundry as the eventual identity owner | open (blocks self-serve onboarding on the approved target) |
 | [FK-GAP-014](#fk-gap-014) | MCP endpoint (and Studio) are not part of the artifact; agents on AppBoundry use HTTP only | missing-integration | integration | medium | P2 | AppBoundry (web interface); AppPort (MCP transport) | open |
 | [FK-GAP-015](#fk-gap-015) | Two AppBoundry artifact formats and runtime paths: repository bundles (appport add) and FeltKit artifacts are not interchangeable | missing-integration | architecture | medium | P2 | AppBoundry (artifact contract); AppPort (packager); FeltKit (producer) | open |
-| [FK-GAP-016](#fk-gap-016) | `npx appport add` is interactive-only and needs a Rust wasm32 toolchain | developer-experience | dx | low | P3 | AppPort CLI | closed in code (AppBoundry 5b1e311, local): the gap was smaller than recorded |
+| [FK-GAP-016](#fk-gap-016) | `npx appport add` is interactive-only and needs a Rust wasm32 toolchain | developer-experience | dx | low | P3 | AppPort CLI | closed — released (appport CLI 1.4.0: add --help, refusal without a terminal). |
 | [FK-GAP-017](#fk-gap-017) | AppPort delivered events a session may not observe (wildcard subscriptions; subscriptions bypassed the application Authorizer) | missing-capability | security | high | P1 | AppPort | closed — released in AppPort (@appport/protocol 1.4.0, core 1.6.0, server 1.2.0, sdk 1.5.0, authorization 1.0.8) |
-| [FK-GAP-018](#fk-gap-018) | AppPort decisions cannot conceal existence (no NOT_FOUND denial) | missing-extension-point | contract | low | P3 | AppPort | implemented (AppPort 81ba58f + FeltKit 3abc1bd, local); awaiting review/release |
-| [FK-GAP-019](#fk-gap-019) | @appport/core 1.6.0 is not portable: a test-only barrier imports node:fs/node:path at load | missing-capability | defect | high | P1 | AppPort | fixed in AppPort (66a7874, local) with a portability test over core's import graph; needs core 1.6.1 |
-| [FK-GAP-020](#fk-gap-020) | AppPort: subscriptions from different connections with the same subscriptionId replaced each other | missing-capability | defect | high | P1 | AppPort | fixed in AppPort (ada9157, local); needs a server release |
-| [FK-GAP-021](#fk-gap-021) | @appport/resolver-client pins @appport/sdk 1.4.0 (and the resolver server pins @appport/server 1.1.5) | missing-integration | dependency | medium | P2 | Resolver | fixed in rkendel1/resolver (c61fe14, local; tests 173 passed/9 skipped, unchanged); needs a release |
+| [FK-GAP-018](#fk-gap-018) | AppPort decisions cannot conceal existence (no NOT_FOUND denial) | missing-extension-point | contract | low | P3 | AppPort | closed — AppPort NOT_FOUND denials released (@appport/authorization 1.1.0, server 1.3.0); FeltKit side merged (PR #62); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). |
+| [FK-GAP-019](#fk-gap-019) | @appport/core 1.6.0 is not portable: a test-only barrier imports node:fs/node:path at load | missing-capability | defect | high | P1 | AppPort | closed — released (@appport/core 1.7.0, portability test). |
+| [FK-GAP-020](#fk-gap-020) | AppPort: subscriptions from different connections with the same subscriptionId replaced each other | missing-capability | defect | high | P1 | AppPort | closed — released (@appport/server 1.3.0, per-connection subscriptions); FeltKit also gives each subscription a unique bus id (main 626bccf). |
+| [FK-GAP-021](#fk-gap-021) | @appport/resolver-client pins @appport/sdk 1.4.0 (and the resolver server pins @appport/server 1.1.5) | missing-integration | dependency | medium | P2 | Resolver | closed — merged (rkendel1/resolver PR #11). |
 
 ## FK-GAP-001
 
@@ -122,7 +122,7 @@ Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 
 
 ### AuthBoundry has no resource-level evaluation, and FeltKit has no AuthBoundry adapter
 
-Discovered 2026-11-05 · missing-capability · integration · severity medium · P2 · open — FeltKit integration point now exists (feltkit({ authorize })); AuthBoundry resource evaluation still missing
+Discovered 2026-11-05 · missing-capability · integration · severity medium · P2 · superseded (2026-11-05 decision) — the wanted outcome (tenant membership and per-resource decisions on the server) is delivered natively by FeltKit (auth.tenant, tenant-scoped collections, the authorize hook; PR #65). The proposed AuthBoundry adapter would make FeltKit depend at runtime on a hosted AuthBoundry service, which the Phase 2 constraints rule out ("FeltKit must remain self-contained"). Delegation for agents acting for a person moves to the agent workstream (AuthBoundry contract implemented in FeltKit, FELTKIT_AUTH_AGENT_STACK_AUDIT.md §5.3). AuthBoundry evaluating `resource` in enforce() remains AuthBoundry's own item.
 
 **Components:**
 
@@ -163,7 +163,7 @@ Discovered 2026-11-05 · missing-capability · integration · severity medium ·
 
 ### No tenancy / membership primitive
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · open — reassigned to AuthBoundry; FeltKit side now available (authorize hook)
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · closed in FeltKit — tenancy primitive (auth.tenant: tenants, memberships, invitations, switching, tenant-scoped collections, typed claims), merged in rkendel1/feltkit PR #65; merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration.
 
 **Components:**
 
@@ -204,7 +204,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 ### No ephemeral / broadcast real-time primitive (presence, typing)
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · implemented across AppPort, FeltKit and AppBoundry (local branches); Multiplayer adoption blocked on the AppPort release
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05).
 
 **Components:**
 
@@ -345,7 +345,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity low · P3 �
 
 ### Files are application-shared; per-resource file access must be bound by the app
 
-Discovered 2026-11-05 · missing-extension-point · integration · severity medium · P2 · implemented in FeltKit (branch claude/file-links, local, not pushed); Multiplayer adoption awaits release
+Discovered 2026-11-05 · missing-extension-point · integration · severity medium · P2 · closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration.
 
 **Components:**
 
@@ -442,7 +442,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity high · P1 
 
 ### AppBoundry deployment (Hetzner) is not available to an application
 
-Discovered 2026-11-05 · unsupported-requirement · deployment · severity high · P1 · blocking deployment acceptance
+Discovered 2026-11-05 · unsupported-requirement · deployment · severity high · P1 · blocked (not actionable under current constraints) — needs Hetzner deployment, which is excluded ("No Hetzner contact or deployment"). Owner: AppBoundry / operator.
 
 **Components:**
 
@@ -560,7 +560,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 ### Client reconnect waits out exponential backoff (up to 10 s) after the network returns
 
-Discovered 2026-11-05 · developer-experience · client · severity low · P3 · implemented (FeltKit 40ba4ad, local); awaiting review/release; Multiplayer e2e catch-up to be re-measured on release
+Discovered 2026-11-05 · developer-experience · client · severity low · P3 · closed in code — merged (FeltKit PR #62); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05).
 
 **Components:**
 
@@ -772,7 +772,7 @@ Discovered 2026-11-05 · missing-integration · architecture · severity medium 
 
 ### `npx appport add` is interactive-only and needs a Rust wasm32 toolchain
 
-Discovered 2026-11-05 · developer-experience · dx · severity low · P3 · closed in code (AppBoundry 5b1e311, local): the gap was smaller than recorded
+Discovered 2026-11-05 · developer-experience · dx · severity low · P3 · closed — released (appport CLI 1.4.0: add --help, refusal without a terminal).
 
 **Components:**
 
@@ -863,7 +863,7 @@ Discovered 2026-11-05 · missing-capability · security · severity high · P1 �
 
 ### AppPort decisions cannot conceal existence (no NOT_FOUND denial)
 
-Discovered 2026-11-05 · missing-extension-point · contract · severity low · P3 · implemented (AppPort 81ba58f + FeltKit 3abc1bd, local); awaiting review/release
+Discovered 2026-11-05 · missing-extension-point · contract · severity low · P3 · closed — AppPort NOT_FOUND denials released (@appport/authorization 1.1.0, server 1.3.0); FeltKit side merged (PR #62); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05).
 
 **Components:**
 
@@ -914,7 +914,7 @@ Discovered 2026-11-05 · missing-extension-point · contract · severity low · 
 
 ### @appport/core 1.6.0 is not portable: a test-only barrier imports node:fs/node:path at load
 
-Discovered 2026-11-05 · missing-capability · defect · severity high · P1 · fixed in AppPort (66a7874, local) with a portability test over core's import graph; needs core 1.6.1
+Discovered 2026-11-05 · missing-capability · defect · severity high · P1 · closed — released (@appport/core 1.7.0, portability test).
 
 **Components:**
 
@@ -953,7 +953,7 @@ Discovered 2026-11-05 · missing-capability · defect · severity high · P1 · 
 
 ### AppPort: subscriptions from different connections with the same subscriptionId replaced each other
 
-Discovered 2026-11-05 · missing-capability · defect · severity high · P1 · fixed in AppPort (ada9157, local); needs a server release
+Discovered 2026-11-05 · missing-capability · defect · severity high · P1 · closed — released (@appport/server 1.3.0, per-connection subscriptions); FeltKit also gives each subscription a unique bus id (main 626bccf).
 
 **Components:**
 
@@ -992,7 +992,7 @@ Discovered 2026-11-05 · missing-capability · defect · severity high · P1 · 
 
 ### @appport/resolver-client pins @appport/sdk 1.4.0 (and the resolver server pins @appport/server 1.1.5)
 
-Discovered 2026-11-05 · missing-integration · dependency · severity medium · P2 · fixed in rkendel1/resolver (c61fe14, local; tests 173 passed/9 skipped, unchanged); needs a release
+Discovered 2026-11-05 · missing-integration · dependency · severity medium · P2 · closed — merged (rkendel1/resolver PR #11).
 
 **Components:**
 
