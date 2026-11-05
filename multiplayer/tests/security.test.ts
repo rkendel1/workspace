@@ -200,8 +200,8 @@ test("unauthorized file access", async () => {
     const { file, attachment: a } = await http.upload(ada, priv, "secret.txt", new TextEncoder().encode("top secret"), "text/plain");
     await ada.mutation(api.messages.send, { channelId: priv, text: "file", attachmentIds: [a.id] });
     // Download links are issued only to readers of the conversation.
-    await rejects(grace.query(api.attachments.download, { attachmentId: a.id }), "NOT_FOUND");
-    await rejects(mallory.query(api.attachments.download, { attachmentId: a.id }), "NOT_FOUND");
+    await rejects(grace.mutation(api.attachments.download, { attachmentId: a.id }), "NOT_FOUND");
+    await rejects(mallory.mutation(api.attachments.download, { attachmentId: a.id }), "NOT_FOUND");
     await rejects(mallory.query(api.attachments.list, { channelId: priv }), "NOT_FOUND");
     // Upload links only for conversations the caller is in.
     await rejects(grace.mutation(api.attachments.uploadLink, { channelId: priv, name: "x" }), "NOT_FOUND");

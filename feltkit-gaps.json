@@ -821,6 +821,37 @@
       "codeFate": "n/a",
       "proposal": "Release the fix.",
       "dependencies": []
+    },
+    {
+      "id": "FK-GAP-022",
+      "discovered": "2026-11-05",
+      "title": "app.agent runs cannot opt into sequence-conflict retries",
+      "category": "missing-extension-point",
+      "layer": "runtime",
+      "components": [
+        "rkendel1/feltkit (runtime/runtime.ts #runAgent)"
+      ],
+      "description": "A mutation can declare retry.sequenceConflicts so concurrent writers to one sequence retry immediately. An app.agent run has only the outbox retry/backoff, so two agent replies posted into one conversation at once collide and the loser waits for the backoff.",
+      "evidence": [
+        "Multiplayer feltkit/agents.ts: retry backoff tuned to 250 ms x 6 attempts to keep replies prompt"
+      ],
+      "wanted": "Concurrent agent replies in one conversation both land promptly.",
+      "provided": "Outbox retry with backoff (FK-GAP-008).",
+      "implementedManually": "Short backoff in the agent declaration.",
+      "workaround": "Tune retry.backoffMs.",
+      "customLoc": "~2",
+      "estimatedHours": "1 h",
+      "codeFate": "Disappears when app.agent accepts retry.sequenceConflicts.",
+      "proposal": "app.agent(..., { retry: { sequenceConflicts: n } }) passed to the run's Runtime#call, as for mutations.",
+      "owner": "FeltKit",
+      "dependencies": [
+        "FK-GAP-008"
+      ],
+      "severity": "low",
+      "priority": "P3",
+      "status": "open",
+      "codeKind": "tuning",
+      "ownershipEvidence": "The retry policy for sequence conflicts is FeltKit's (fn.retry in Runtime#call); agent runs are dispatched through the same call."
     }
   ],
   "accounting": {

@@ -8,7 +8,7 @@ Platform source revisions read: rkendel1/feltkit@b349543 (main; includes f20ed78
 
 **Gap-to-code accounting:** ≈550 code lines (≈22% of custom code); the attributions overlap slightly (FK-GAP-001 call sites sit inside modules also attributed to FK-GAP-003/007/008), deduplicated ≈520. ≈370 code lines (≈15%) if FK-GAP-001, -003, -004, -006, -007, -008 were closed; the rest relocates or is application semantics. Method: cloc 2.00 on each file (tools/measure.mjs); function-level counts by non-blank, non-comment lines of the named exports.
 
-**21 gaps.** By classification: missing-extension-point 3, missing-capability 10, unsupported-requirement 1, developer-experience 3, missing-integration 4. By priority: P1 7, P2 9, P3 5.
+**22 gaps.** By classification: missing-extension-point 4, missing-capability 10, unsupported-requirement 1, developer-experience 3, missing-integration 4. By priority: P1 7, P2 9, P3 6.
 
 Classifications: `missing-capability`, `missing-integration`, `missing-extension-point`, `developer-experience`, `documentation`, `unsupported-requirement`, `application-specific`. `application-specific` entries are recorded so they are *not* counted as platform overhead.
 
@@ -35,6 +35,7 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 | [FK-GAP-019](#fk-gap-019) | @appport/core 1.6.0 is not portable: a test-only barrier imports node:fs/node:path at load | missing-capability | defect | high | P1 | AppPort | closed — released (@appport/core 1.7.0, portability test). |
 | [FK-GAP-020](#fk-gap-020) | AppPort: subscriptions from different connections with the same subscriptionId replaced each other | missing-capability | defect | high | P1 | AppPort | closed — released (@appport/server 1.3.0, per-connection subscriptions); FeltKit also gives each subscription a unique bus id (main 626bccf). |
 | [FK-GAP-021](#fk-gap-021) | @appport/resolver-client pins @appport/sdk 1.4.0 (and the resolver server pins @appport/server 1.1.5) | missing-integration | dependency | medium | P2 | Resolver | closed — merged (rkendel1/resolver PR #11). |
+| [FK-GAP-022](#fk-gap-022) | app.agent runs cannot opt into sequence-conflict retries | missing-extension-point | runtime | low | P3 | FeltKit | open |
 
 ## FK-GAP-001
 
@@ -1041,3 +1042,43 @@ Discovered 2026-11-05 · missing-integration · dependency · severity medium ·
 **Architectural owner:** Resolver
 
 **Dependencies:** none
+
+## FK-GAP-022
+
+### app.agent runs cannot opt into sequence-conflict retries
+
+Discovered 2026-11-05 · missing-extension-point · runtime · severity low · P3 · open
+
+**Components:**
+
+- rkendel1/feltkit (runtime/runtime.ts #runAgent)
+
+**Description:** A mutation can declare retry.sequenceConflicts so concurrent writers to one sequence retry immediately. An app.agent run has only the outbox retry/backoff, so two agent replies posted into one conversation at once collide and the loser waits for the backoff.
+
+**Evidence:**
+
+- Multiplayer feltkit/agents.ts: retry backoff tuned to 250 ms x 6 attempts to keep replies prompt
+
+**What the developer wanted:** Concurrent agent replies in one conversation both land promptly.
+
+**What the platform provides:** Outbox retry with backoff (FK-GAP-008).
+
+**Implemented manually:** Short backoff in the agent declaration.
+
+**Workaround:** Tune retry.backoffMs.
+
+**Custom LOC attributable:** ~2
+
+**Engineering time attributable:** 1 h
+
+**Kind of code:** tuning
+
+**If the platform provided it:** Disappears when app.agent accepts retry.sequenceConflicts.
+
+**Proposed change:** app.agent(..., { retry: { sequenceConflicts: n } }) passed to the run's Runtime#call, as for mutations.
+
+**Architectural owner:** FeltKit
+
+**Dependencies:** FK-GAP-008
+
+**Ownership evidence:** The retry policy for sequence conflicts is FeltKit's (fn.retry in Runtime#call); agent runs are dispatched through the same call.

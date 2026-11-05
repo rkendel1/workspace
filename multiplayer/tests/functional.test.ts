@@ -96,7 +96,7 @@ test("upload an attachment over a file link, send it, download it over a file li
     await ada.mutation(api.messages.send, { channelId: general, text: "see file", attachmentIds: [a.id] });
     const [m] = (await grace.query(api.messages.list, { channelId: general })).items;
     assert.equal(m.attachments[0].name, "data.bin");
-    const d = await grace.query(api.attachments.download, { attachmentId: a.id });
+    const d = await grace.mutation(api.attachments.download, { attachmentId: a.id });
     assert.match(d.url, /^\/api\/files\//);
     assert.deepEqual([...(await http.download(d))], [...bytes], "bytes round-trip exactly, over HTTP");
     assert.equal((await grace.query(api.attachments.list, { channelId: general })).length, 1);

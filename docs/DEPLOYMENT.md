@@ -5,8 +5,8 @@
 | Target | State | Evidence |
 |---|---|---|
 | **Managed AppBoundry on Hetzner** (approved target), `npx feltkit deploy --target appboundry` | **Blocked, not deployed.** Needs a portal URL and a deploy token. AppBoundry's own readiness document says routing/TLS is not implemented and customer execution is gated off | `✗ Deploying to AppBoundry needs APPBOUNDRY_URL (the AppBoundry portal), APPBOUNDRY_TOKEN (an AppBoundry deploy token).` The portal `https://appboundry.fly.dev` answers `401` (its contract's `AUTHENTICATION_REQUIRED`). AppBoundry `docs/feltkit-deploy-readiness.md`: "Nothing here is deployed", "Routing: designed, not implemented", "Untrusted execution in production: not ready". FK-GAP-009 |
-| **The artifact on the published AppBoundry runtime** (`@appport/appboundry@1.9.0`, production environment, local FeltDB state; the artifact requires `crypto@1`, which 1.9.0 provides) | **Verified** | `deploy/verify-appboundry.sh`: 8/8 browser checks, the agent over HTTP, restart on the same state with data intact (`docs/screenshots/deployment-evidence.json`) |
-| The artifact against the test suite | **Verified** | `MP_TARGET=artifact npm test`: 18/18 |
+| **The artifact on AppBoundry** | **Blocked since the move to FeltKit accounts, workspaces and `app.agent`** (2026-11-05). `feltkit build --target appboundry` refuses the app (`app.agent("assistant")` needs a host interface AppBoundry does not have), and AppBoundry ≥ 1.11.0 refuses artifacts that declare accounts or tenancy (FK-GAP-013). `deploy/verify-appboundry.sh` and `e2e/deployment.e2e.cjs` stop with exit 2 and the reason. The path back: `accounts@1` / `tenancy@1` / `agents@1` host interfaces (`FELTKIT_IDENTITY_HOST_CONTRACT.md`) | Earlier verification (`@appport/appboundry` 1.9.0, before the migration): 8/8 browser checks, agent over HTTP, restart with data intact (`docs/screenshots/deployment-evidence.json`) |
+| The artifact against the test suite | **Skipped, with the reason** | `MP_TARGET=artifact npm test` skips all 25 tests: the artifact cannot be built (see above). The FeltKit runtime runs them: `npm test`, 25/25 |
 
 No substitute hosting was provisioned. Nothing on the shared control plane was changed. There is no
 public URL.
@@ -34,8 +34,8 @@ The artifact runs without the source repository. AppBoundry verifies it before s
 | What | Where |
 |---|---|
 | Deploy credential | `APPBOUNDRY_URL`, `APPBOUNDRY_TOKEN` (environment only; FeltKit never writes or prints it) |
-| Identity on AppBoundry | Operators issue sessions: `appboundry admin bootstrap`, `admin users add`, `admin sessions issue`. FeltKit's self-serve accounts aren't available on AppBoundry (FK-GAP-013) |
-| Room agent | A session for user `assistant` (`--type agent --role agent`), given to the agent process as `FELTKIT_AGENT_TOKEN`. It's the only secret the agent holds |
+| Identity | FeltKit accounts (password, magic link) and workspaces on FeltKit's server (`feltkit start` / `feltkit deploy` to a Node target). On AppBoundry: not available until `accounts@1` / `tenancy@1` (FK-GAP-013) |
+| Room agent | `app.agent("assistant")`, run by FeltKit after a mention commits, as its own principal with the `agent` role. No external process and no session token to hand out; add it to a workspace from the workspace settings |
 | Data | FeltDB state in the runtime's `--state` directory (local) or Managed FeltDB (`--feltdb managed`) |
 
 The browser never receives service credentials. The build scans the frontend for server-only values.

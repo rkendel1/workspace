@@ -738,7 +738,7 @@ function AddMembers({ channelId, members, onClose, toasts }: { channelId: string
 
 /** Download an attachment through a short-lived file link (attachments:download, client.fileUrl). */
 async function openFile(client: ReturnType<typeof useFeltKit>, attachmentId: string) {
-  const link = await client.query(api.attachments.download, { attachmentId });
+  const link = await client.mutation(api.attachments.download, { attachmentId });
   const a = Object.assign(document.createElement("a"), { href: client.fileUrl(link), download: link.name });
   a.click();
 }

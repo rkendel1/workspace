@@ -55,3 +55,4 @@ Each change lives with the component that owns the concept (FeltKit composes; Ap
 ## Recorded, not planned
 
 - **FK-GAP-012** Capabilities require hand-written output schemas even when the handler's return type is known — accepted (by design)
+- **FK-GAP-022** app.agent runs cannot opt into sequence-conflict retries — open

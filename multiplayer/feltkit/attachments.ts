@@ -43,7 +43,8 @@ export const attach = app.mutation({
 });
 
 /** A short-lived download link for a file in a conversation the caller can read. */
-export const download = app.query({
+/** A short-lived download link. A mutation, not a query: each call issues a link, so nothing may watch it live. */
+export const download = app.mutation({
   access: "files.read",
   args: { attachmentId: s.string() },
   returns: s.object({ name: s.string(), contentType: s.string(), size: s.number(), url: s.string(), expiresAt: s.string() }),
