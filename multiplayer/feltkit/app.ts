@@ -26,7 +26,7 @@ export const app = feltkit({
     member: HUMAN,
     // A room agent. It reads only channels it was added to and writes only through agent.*
     // capabilities and messages.write; membership checks in feltkit/_authz.ts apply to it too.
-    agent: ["agents.work", "messages.read", "messages.write", "plans.read", "plans.write", "presence.write"],
+    agent: ["agents.work", "messages.read", "messages.write", "plans.read", "plans.write", "presence.write", "notifications.send"],
     admin: ["intelligence.*", "credential.*", "configuration.*", "apikeys.*", "webhooks.*", "jobs.*", "schedules.*", "feltkit.operations.*"],
   },
   auth: { accounts: { roles: ["member"] } },

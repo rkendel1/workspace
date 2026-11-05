@@ -10,7 +10,7 @@ import { fail } from "@feltdb/feltkit";
 import { channelMembers, channels, memberships, participants, type WorkspaceRole } from "./app.js";
 
 // The handler context type is structural; these helpers take what they use.
-type Doc = Record<string, any> & { id: string };
+type Doc = any;
 export interface Ctx {
   auth: { requirePrincipal(): { id: string; type: string; displayName?: string } };
   db: {
