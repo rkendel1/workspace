@@ -5,6 +5,14 @@ Platform: `@feltdb/feltkit` / `create-feltkit` 0.3.15, `@feltdb/core` 0.21.0, `@
 `@appport/services` 0.15.0, `@appport/appboundry` 1.8.0. Every number below comes from a command in
 [§17](#17-reproducible-measurement-commands). Estimates are labelled as estimates.
 
+> **Update 2026-11-05 (platform work after this build):**
+> - FK-GAP-001 is implemented in FeltKit as `feltkit({ authorize })` (local, unreleased).
+> - AppPort's subscription leak (FK-GAP-017) is fixed and scoped events are added (FK-GAP-004 prerequisite; local, unreleased).
+> - The register now has 18 gaps.
+> - Measured on Multiplayer, the hook centralizes enforcement but does **not** reduce code (net +39 lines). This corrects the ≈63-line estimate in §12 and §14.
+>
+> See [FELTKIT_GAP_REGISTER.md](FELTKIT_GAP_REGISTER.md) and [acceptance/feltkit-authorize/](acceptance/feltkit-authorize/). The numbers below are the original build's.
+
 ## Executive summary (for the FeltKit website)
 
 > **We built a multiplayer collaboration app for people and agents with FeltKit.**

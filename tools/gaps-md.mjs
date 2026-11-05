@@ -20,6 +20,14 @@ for (const g of reg.gaps) {
   md.push(...field("Workaround", g.workaround), ...field("Custom LOC attributable", g.customLoc), ...field("Engineering time attributable", g.estimatedHours));
   md.push(...field("Kind of code", g.codeKind ?? "—"), ...field("If the platform provided it", g.codeFate), ...field("Proposed change", g.proposal), ...field("Architectural owner", g.owner));
   md.push(...field("Dependencies", g.dependencies.length ? g.dependencies.join(", ") : "none"));
+  if (g.ownershipEvidence) md.push(...field("Ownership evidence", g.ownershipEvidence));
+  if (g.resolution) {
+    const r = g.resolution;
+    md.push(`#### Platform work (${r.date})`, "");
+    for (const [label, key] of [["What was missing", "missing"], ["What existed already", "existed"], ["Defect found", "defectFound"], ["Reused", "reused"], ["Implemented", "implemented"], ["Public API", "publicApi"], ["Tests", "tests"], ["Consumer acceptance", "consumer"], ["Measured effect", "measuredEffect"], ["Remaining / unverified", "remaining"]]) {
+      if (r[key] !== undefined) md.push(...field(label, r[key]));
+    }
+  }
 }
 if (reg.accounting) md.splice(8, 0, `**Gap-to-code accounting:** ${reg.accounting.attributedToGaps}. ${reg.accounting.wouldDisappear}. Method: ${reg.accounting.method}.`, "");
 writeFileSync(new URL("../FELTKIT_GAP_REGISTER.md", import.meta.url), md.join("\n"));

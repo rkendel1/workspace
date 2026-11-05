@@ -4,20 +4,20 @@
 
 Project: Multiplayer (rkendel1/workspace, multiplayer/). Platform: @feltdb/feltkit 0.3.15, create-feltkit 0.3.15, @feltdb/core 0.21.0, @appport/sdk 1.4.0, @appport/services 0.15.0, @appport/appboundry 1.8.0.
 
-Platform source revisions read: rkendel1/feltkit@50bc617, rkendel1/appboundry@94502ef, rkendel1/appport@e9815a5, rkendel1/authboundry@b8ed659, rkendel1/appport-services@ac20b5a.
+Platform source revisions read: rkendel1/feltkit@50bc617, rkendel1/appboundry@94502ef, rkendel1/appport@e9815a5, rkendel1/authboundry@b8ed659, rkendel1/appport-services@ac20b5a, rkendel1/feltkit (work)@f20ed78 on claude/product-primitives (local, unpushed, unreleased), rkendel1/appport (work)@f1f8c21 on claude/scoped-event-authorization (local, unpushed, unreleased).
 
 **Gap-to-code accounting:** ≈550 code lines (≈22% of custom code); the attributions overlap slightly (FK-GAP-001 call sites sit inside modules also attributed to FK-GAP-003/007/008), deduplicated ≈520. ≈370 code lines (≈15%) if FK-GAP-001, -003, -004, -006, -007, -008 were closed; the rest relocates or is application semantics. Method: cloc 2.00 on each file (tools/measure.mjs); function-level counts by non-blank, non-comment lines of the named exports.
 
-**16 gaps.** By classification: missing-extension-point 2, missing-capability 7, unsupported-requirement 1, developer-experience 3, missing-integration 3. By priority: P1 4, P2 8, P3 4.
+**18 gaps.** By classification: missing-extension-point 3, missing-capability 8, unsupported-requirement 1, developer-experience 3, missing-integration 3. By priority: P1 5, P2 8, P3 5.
 
 Classifications: `missing-capability`, `missing-integration`, `missing-extension-point`, `developer-experience`, `documentation`, `unsupported-requirement`, `application-specific`. `application-specific` entries are recorded so they are *not* counted as platform overhead.
 
 | ID | Title | Classification | Layer | Severity | Priority | Owner | Status |
 |---|---|---|---|---|---|---|---|
-| [FK-GAP-001](#fk-gap-001) | No application-supplied, input-aware authorization hook in FeltKit | missing-extension-point | hook | high | P1 | FeltKit (exposes AppPort's existing Authorizer composition); AppPort unchanged | open (workaround in app) |
-| [FK-GAP-002](#fk-gap-002) | AuthBoundry has no resource-level evaluation, and FeltKit has no AuthBoundry adapter | missing-capability | integration | medium | P2 | AuthBoundry (evaluation); FeltKit (adapter) | open |
-| [FK-GAP-003](#fk-gap-003) | No tenancy / membership primitive | missing-capability | primitive | medium | P2 | FeltKit (or AuthBoundry, if it owns tenancy) | open (workaround in app) |
-| [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | FeltKit (server + client); AppBoundry host interface for parity | open (workaround in app) |
+| [FK-GAP-001](#fk-gap-001) | No application-supplied, input-aware authorization hook in FeltKit | missing-extension-point | hook | high | P1 | FeltKit (exposes AppPort's existing Authorizer composition); AppPort unchanged | implemented in FeltKit (local commit f20ed78, unreleased); consumer acceptance passed |
+| [FK-GAP-002](#fk-gap-002) | AuthBoundry has no resource-level evaluation, and FeltKit has no AuthBoundry adapter | missing-capability | integration | medium | P2 | AuthBoundry (evaluation); FeltKit (adapter) | open — FeltKit integration point now exists (feltkit({ authorize })); AuthBoundry resource evaluation still missing |
+| [FK-GAP-003](#fk-gap-003) | No tenancy / membership primitive | missing-capability | primitive | medium | P2 | AuthBoundry (membership as delegation), with FeltKit integration through FK-GAP-001/002 — not a FeltKit membership store | open — reassigned to AuthBoundry; FeltKit side now available (authorize hook) |
+| [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events) | partially addressed — AppPort prerequisite implemented locally (f1f8c21, unreleased); FeltKit integration blocked on an AppPort release (publishing needs approval) |
 | [FK-GAP-005](#fk-gap-005) | Live-query invalidation is per collection, not per query predicate | missing-capability | primitive | medium | P2 | FeltKit (change feed); FeltDB (F7 change listener naming keys) | open |
 | [FK-GAP-006](#fk-gap-006) | No text search / contains operator in ctx.db.query | missing-capability | primitive | low | P3 | FeltDB (index), FeltKit (exposure) | open (workaround in app) |
 | [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | open (workaround in app) |
@@ -30,12 +30,14 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 | [FK-GAP-014](#fk-gap-014) | MCP endpoint (and Studio) are not part of the artifact; agents on AppBoundry use HTTP only | missing-integration | integration | medium | P2 | AppBoundry (web interface); AppPort (MCP transport) | open |
 | [FK-GAP-015](#fk-gap-015) | Two AppBoundry artifact formats and runtime paths: repository bundles (appport add) and FeltKit artifacts are not interchangeable | missing-integration | architecture | medium | P2 | AppBoundry (artifact contract); AppPort (packager); FeltKit (producer) | open |
 | [FK-GAP-016](#fk-gap-016) | `npx appport add` is interactive-only and needs a Rust wasm32 toolchain | developer-experience | dx | low | P3 | AppPort CLI | open |
+| [FK-GAP-017](#fk-gap-017) | AppPort delivered events a session may not observe (wildcard subscriptions; subscriptions bypassed the application Authorizer) | missing-capability | security | high | P1 | AppPort | fixed in AppPort locally (f1f8c21, unreleased, unpushed); needs review and release |
+| [FK-GAP-018](#fk-gap-018) | AppPort decisions cannot conceal existence (no NOT_FOUND denial) | missing-extension-point | contract | low | P3 | AppPort | open (FeltKit workaround in the primitive) |
 
 ## FK-GAP-001
 
 ### No application-supplied, input-aware authorization hook in FeltKit
 
-Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 · open (workaround in app)
+Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 · implemented in FeltKit (local commit f20ed78, unreleased); consumer acceptance passed
 
 **Components:**
 
@@ -59,13 +61,13 @@ Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 
 
 **Workaround:** Centralized helper module called explicitly by each handler; transport-independent (runs inside the function, so HTTP, AppPort and MCP calls all pass through it).
 
-**Custom LOC attributable:** 51 (feltkit/_authz.ts) + 43 call sites in handlers = ~94 code lines. Of these ~20 lines of plumbing (load record → resolve workspace → find membership) and the 43 call sites would disappear; ~30 lines of membership policy are application-specific and would relocate into the registered authorizer.
+**Custom LOC attributable:** 51 (feltkit/_authz.ts) + 43 call sites in handlers = ~94 code lines. Of these ~20 lines of plumbing (load record → resolve workspace → find membership) and the 43 call sites would disappear; ~30 lines of membership policy are application-specific and would relocate into the registered authorizer. — MEASURED after the primitive (consumer run): net +39 lines; 37 call sites remain as loaders. See resolution.measuredEffect.
 
 **Engineering time attributable:** 2–3 h (design + every handler + 9 security tests' worth of cases)
 
 **Kind of code:** platform integration glue (call sites, plumbing) + application policy (rules)
 
-**If the platform provided it:** Relocates, does not disappear: membership policy is application-specific and would move from handler preambles into one registered authorizer. The per-handler calls and the duplicated 'load record → find workspace' plumbing disappear; denials gain AppPort decision ids and activity evidence.
+**If the platform provided it:** Relocates and gains guarantees; does not shrink Multiplayer (measured).
 
 **Proposed change:** feltkit({ authorize: Authorizer | (req: { principal, function, capability, input, db }) => Decision }) composed after the role authorizer with combineAuthorizers, given a read-only db handle on the same instance, applied identically at HTTP, AppPort, MCP and Services boundaries, and recorded like role denials. Per-function opt-in: app.query({ access, resource: (args) => ({ type: 'channel', id: args.channelId }) }).
 
@@ -73,11 +75,51 @@ Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 
 
 **Dependencies:** none
 
+#### Platform work (2026-11-05)
+
+**What was missing:** A way for an application to supply an input-aware decision composed with FeltKit's role policy at every boundary.
+
+**What existed already:** AppPort's Authorizer contract already carries the validated input ('so policies can make resource-aware decisions') and AuthorizationDecision; FeltKit's Authority already passed `input` but evaluated roles only. Every interface (HTTP /api, AppPort, MCP, agent actions, jobs) already funnels into Runtime#call; the AppBoundry guest has the same call path.
+
+**Reused:**
+
+- @appport/authorization AuthorizationDecision (return type)
+- Runtime#call (single execution boundary)
+- the call's own ctx.db reader (read fences at commit; live-query read set)
+- FeltKit activity record (authority.*)
+- isFeltKitError brand check
+
+**Implemented:**
+
+- src/authorize.ts: AuthorizeHook/AuthorizeRequest/AuthorizeResult, evaluateAuthorize (fail closed, read-only db view) — runtime-neutral, shared by runtime and guest
+- FeltKitOptions.authorize
+- Runtime#call: hook after roles + validation, before the handler, inside each attempt (re-evaluated on sequence retries); authority.resource recorded
+- AppBoundry guest: the same hook at the same point
+- Docs: README, GUARANTEES (table), CHANGELOG, feltkit-build skill; UPSTREAM-GAPS A8/A9
+
+**Public API:** feltkit({ authorize?: (req: { function, kind, access, capability?, principal, args, transport, requestId, db }) => boolean | AuthorizationDecision | Promise<…> }); exported types AuthorizeHook, AuthorizeRequest, AuthorizeResult; activity entry authority.resource { allowed, reason? }. Additive: no change for apps without it.
+
+**Tests:**
+
+- packages/sdk/test/authorize.test.ts: 10 tests — decision from args + stored records; order (roles → validation → hook); AppPort dispatch; a real MCP client; denial evidence incl. NOT_FOUND concealment; commit fence (membership revoked mid-call → CONFLICT, nothing written); live read set; a real live-query client denied on revocation; fail closed (throw / garbage / write attempt); the compiled AppBoundry artifact
+- Full FeltKit suite: 389/389 (baseline 379/379)
+
+**Consumer acceptance:** acceptance/feltkit-authorize/run.sh: local FeltKit packed into a scratch copy of Multiplayer; Multiplayer's 18 tests pass unchanged (no regression), and pass again with the whole membership policy in one feltkit({ authorize }) hook while _authz.ts's requireWorkspace/requireChannel enforce nothing.
+
+**Measured effect:** Code size did not shrink: _authz.ts 51 → 45 lines, hook +45, net +39; 37 call sites remain as context loaders (participant, role, channel). The gain is guarantees: one policy on every function and interface, default-deny for functions the policy does not recognise, decision fenced at commit, live revocation, recorded decisions. The earlier estimate (≈63 lines disappear) was wrong and is corrected here.
+
+**Remaining / unverified:**
+
+- Not released (needs approval to publish @feltdb/feltkit).
+- A central hook relies on argument naming (Multiplayer's presence:heartbeat names its channel `typingIn`; the first consumer run caught it). Proposal: optional per-function `resource: (args) => ({ type, id })` declaration so the policy does not infer from names.
+- AppPort decisions cannot express NOT_FOUND (AppPort A9); FeltKit accepts fail('NOT_FOUND') from the hook.
+- Unverified on the real AppBoundry runtime (@appport/appboundry): the guest change ships in the artifact, but the published runtime was not rebuilt with it here; FeltKit's reference host (createArtifactTestApp) passes.
+
 ## FK-GAP-002
 
 ### AuthBoundry has no resource-level evaluation, and FeltKit has no AuthBoundry adapter
 
-Discovered 2026-11-05 · missing-capability · integration · severity medium · P2 · open
+Discovered 2026-11-05 · missing-capability · integration · severity medium · P2 · open — FeltKit integration point now exists (feltkit({ authorize })); AuthBoundry resource evaluation still missing
 
 **Components:**
 
@@ -108,7 +150,7 @@ Discovered 2026-11-05 · missing-capability · integration · severity medium ·
 
 **If the platform provided it:** Would move membership records and policy to AuthBoundry; requires FK-GAP-001's hook as the integration point.
 
-**Proposed change:** AuthBoundry: evaluate `resource` against tenant membership/relationship policy. FeltKit: an AuthBoundry Authorizer adapter plugged in through FK-GAP-001's hook.
+**Proposed change:** AuthBoundry: evaluate `resource` (not only record it). FeltKit: an adapter that implements AuthorizeHook by calling AuthBoundry enforce/decide with { principal, capability, resource } — plugs into the hook from FK-GAP-001 with no further FeltKit API.
 
 **Architectural owner:** AuthBoundry (evaluation); FeltKit (adapter)
 
@@ -118,7 +160,7 @@ Discovered 2026-11-05 · missing-capability · integration · severity medium ·
 
 ### No tenancy / membership primitive
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · open (workaround in app)
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · open — reassigned to AuthBoundry; FeltKit side now available (authorize hook)
 
 **Components:**
 
@@ -149,15 +191,17 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **Proposed change:** Optional `app.tenancy({ collection, roles })` primitive: membership + invitation records and a `ctx.tenant` resolved per call, feeding FK-GAP-001.
 
-**Architectural owner:** FeltKit (or AuthBoundry, if it owns tenancy)
+**Architectural owner:** AuthBoundry (membership as delegation), with FeltKit integration through FK-GAP-001/002 — not a FeltKit membership store
 
 **Dependencies:** FK-GAP-001
+
+**Ownership evidence:** authboundry docs/PHASE_PRODUCT_12_CUSTOMER_IDENTITY_TENANT_LIFECYCLE.md: 'Use AuthBoundry's delegation model for customer-to-organization membership, not a separate RBAC system.' A FeltKit tenancy store would duplicate it.
 
 ## FK-GAP-004
 
 ### No ephemeral / broadcast real-time primitive (presence, typing)
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · open (workaround in app)
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · partially addressed — AppPort prerequisite implemented locally (f1f8c21, unreleased); FeltKit integration blocked on an AppPort release (publishing needs approval)
 
 **Components:**
 
@@ -189,9 +233,33 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **Proposed change:** An authorized ephemeral channel on the existing /api/events stream: publish(topic, payload, ttl) from functions, subscribe(topic) from clients, topics authorized by FK-GAP-001's hook; never written to FeltDB.
 
-**Architectural owner:** FeltKit (server + client); AppBoundry host interface for parity
+**Architectural owner:** AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events)
 
 **Dependencies:** FK-GAP-001 (topic authorization)
+
+#### Platform work (2026-11-05)
+
+**What existed already:** AppPort events: defineEvent (with authorization), subscribe/unsubscribe/event envelopes, at-most-once EventBus ('nothing is buffered for absent subscribers'), WebSocket and SSE (/appport/events) delivery. This is the ephemeral channel; FeltKit should not build another.
+
+**Defect found:** AppPort delivered events a session may not observe: a '*' subscription required nothing and received every event (spec §21.7 violated), and subscriptions were checked against session.permissions only (never the application's Authorizer), so principal-identified connections could not subscribe to permissioned events. Events had no scope, so per-tenant events would reach every tenant. Reproduced by packages/server/test/subscriptions.test.ts before the fix.
+
+**Implemented:**
+
+- AppPortApplication.authorizeObservation (the application's Authorizer decides: event as capability, declared permissions as required, { scope } as input)
+- AppPortConnection: exact subscriptions authorized when made; every delivery re-authorized (wildcard leak closed; revocation applies to live subscriptions)
+- Scoped events: optional `scope` on event/subscribe envelopes (validated; spec §9.3/§9.4 and envelope JSON schema), EmitEventInput.scope, EventFilter.scope; SSE ?scope=
+
+**Tests:**
+
+- packages/server/test/subscriptions.test.ts: 5 tests incl. a real HTTP SSE stream
+- AppPort full suite: 1812 passed, 1 skipped (baseline 1807 passed, 1 skipped)
+
+**Remaining / unverified:**
+
+- Release of AppPort (approval).
+- FeltKit integration: declare events in feltkit({...}), publish from functions with scope, client subscribe; the FeltKit authorize hook then decides scopes (e.g. workspace membership).
+- AppPort client/transport API to pass `scope` (protocol and server done; client SDK not changed).
+- Compatibility: an AppPort app with no authorizer (publicOnlyAuthorizer) can no longer open permissioned subscriptions from session.permissions alone.
 
 ## FK-GAP-005
 
@@ -675,5 +743,83 @@ Discovered 2026-11-05 · developer-experience · dx · severity low · P3 · ope
 **Proposed change:** `appport add --non-interactive --name … --capability name:in:out:perm` or `--from contract.json`; document the Rust requirement up front.
 
 **Architectural owner:** AppPort CLI
+
+**Dependencies:** none
+
+## FK-GAP-017
+
+### AppPort delivered events a session may not observe (wildcard subscriptions; subscriptions bypassed the application Authorizer)
+
+Discovered 2026-11-05 · missing-capability · security · severity high · P1 · fixed in AppPort locally (f1f8c21, unreleased, unpushed); needs review and release
+
+**Components:**
+
+- rkendel1/appport (packages/server/src/connection.ts)
+
+**Description:** A '*' subscription required no permission and received every event, including those whose definition requires permissions, contrary to spec §21.7. Subscription checks read session.permissions only, never the application's Authorizer. Found while closing FK-GAP-004.
+
+**Evidence:**
+
+- packages/server/test/subscriptions.test.ts 'does not deliver events a wildcard subscriber may not observe' failed on e9815a5: received ['secrets.changed', 'news.posted'] for a principal without secrets.read
+- connection.ts (e9815a5) #subscribe: `const definition = name === "*" ? undefined : …; const required = definition?.authorization ?? []; const granted = this.#session?.permissions ?? []`
+
+**What the developer wanted:** Events reach only sessions allowed to observe them.
+
+**What the platform provides:** Exact-name permission check against session.permissions.
+
+**Implemented manually:** Nothing in apps (FeltKit does not use AppPort events yet, so no FeltKit app was exposed).
+
+**Workaround:** —
+
+**Custom LOC attributable:** 0
+
+**Engineering time attributable:** 1.5 (fix + tests)
+
+**Kind of code:** platform defect
+
+**If the platform provided it:** Fixed upstream (local).
+
+**Proposed change:** Implemented: authorize subscribe and each delivery through the application's Authorizer.
+
+**Architectural owner:** AppPort
+
+**Dependencies:** none
+
+## FK-GAP-018
+
+### AppPort decisions cannot conceal existence (no NOT_FOUND denial)
+
+Discovered 2026-11-05 · missing-extension-point · contract · severity low · P3 · open (FeltKit workaround in the primitive)
+
+**Components:**
+
+- @appport/authorization AuthorizationDecision
+
+**Description:** A policy that answers unknown and unauthorized ids alike (NOT_FOUND) cannot express it in AppPort's decision, which denies only with UNAUTHORIZED or FORBIDDEN.
+
+**Evidence:**
+
+- @appport/authorization dist/index.d.ts: { allowed: false; code: 'UNAUTHORIZED' | 'FORBIDDEN'; reason? }
+- Multiplayer refuses cross-tenant ids with NOT_FOUND (tests/security.test.ts)
+
+**What the developer wanted:** Refuse without revealing that the record exists.
+
+**What the platform provides:** FORBIDDEN/UNAUTHORIZED.
+
+**Implemented manually:** FeltKit accepts fail('NOT_FOUND') thrown from the authorize hook and records it as a denial.
+
+**Workaround:** Throw instead of returning a decision.
+
+**Custom LOC attributable:** 0
+
+**Engineering time attributable:** 0.25
+
+**Kind of code:** —
+
+**If the platform provided it:** n/a
+
+**Proposed change:** Optional `NOT_FOUND` denial code (or `conceal: true`) on AuthorizationDecision.
+
+**Architectural owner:** AppPort
 
 **Dependencies:** none
