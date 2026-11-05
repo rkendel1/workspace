@@ -64,7 +64,7 @@ test("unauthorized direct-message access: only the participants", async () => {
     const alan = t.as("alan");
     await alan.mutation(api.me.ensure, {});
     const inv = await ada.mutation(api.invitations.create, { workspaceId: ws, role: "member" });
-    await alan.mutation(api.invitations.accept, { code: inv.id });
+    await alan.mutation(api.invitations.accept, { code: inv.code });
     const graceId = (await grace.query(api.me.get))!.participant.id;
     const dm = await ada.mutation(api.channels.openConversation, { workspaceId: ws, participantIds: [graceId] });
     await ada.mutation(api.messages.send, { channelId: dm, text: "between us" });
@@ -90,15 +90,18 @@ test("role-based access and invitation authorization", async () => {
     const alan = t.as("alan");
     await alan.mutation(api.me.ensure, {});
     const guestInv = await grace.mutation(api.invitations.create, { workspaceId: ws, role: "guest" });
-    await alan.mutation(api.invitations.accept, { code: guestInv.id });
+    await alan.mutation(api.invitations.accept, { code: guestInv.code });
     assert.deepEqual(await alan.query(api.channels.list, { workspaceId: ws }), []);
     await rejects(alan.mutation(api.channels.create, { workspaceId: ws, name: "x", kind: "public" }), "FORBIDDEN");
     await rejects(alan.query(api.activity.list, { workspaceId: ws }), "FORBIDDEN");
+    // The link carries a 256-bit code from ctx.crypto.token(); the record id is not a code.
+    assert.match(guestInv.code, /^[A-Za-z0-9_-]{43}$/);
+    await rejects(mallory.mutation(api.invitations.accept, { code: guestInv.id }), "NOT_FOUND");
     // Invitations work once, and revoked ones never.
-    await rejects(t.as("alan").mutation(api.invitations.accept, { code: guestInv.id }), "NOT_FOUND");
+    await rejects(t.as("alan").mutation(api.invitations.accept, { code: guestInv.code }), "NOT_FOUND");
     const inv = await ada.mutation(api.invitations.create, { workspaceId: ws, role: "member" });
     await ada.mutation(api.invitations.revoke, { invitationId: inv.id });
-    await rejects(mallory.mutation(api.invitations.accept, { code: inv.id }), ["NOT_FOUND", "FAILED_PRECONDITION"]);
+    await rejects(mallory.mutation(api.invitations.accept, { code: inv.code }), ["NOT_FOUND", "FAILED_PRECONDITION"]);
     // The workspace's AppPort permission alone is not enough: a principal without the app role is refused before the handler.
     await rejects(t.as({ id: "noroles", type: "user", roles: [] }).query(api.channels.list, { workspaceId: ws }), "FORBIDDEN");
   } finally { await t.close(); }
@@ -172,7 +175,7 @@ test("agent permission escalation is refused at both layers", async () => {
     await rejects(rogue.query(api.agents.context, { requestId: req.id }), "NOT_FOUND");
     // Agents cannot accept invitations to get in.
     const inv = await ada.mutation(api.invitations.create, { workspaceId: ws, role: "member" });
-    await rejects(rogue.mutation(api.invitations.accept, { code: inv.id }), "FORBIDDEN");
+    await rejects(rogue.mutation(api.invitations.accept, { code: inv.code }), "FORBIDDEN");
   } finally { await t.close(); }
 });
 

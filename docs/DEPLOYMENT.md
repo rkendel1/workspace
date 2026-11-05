@@ -5,7 +5,7 @@
 | Target | State | Evidence |
 |---|---|---|
 | **Managed AppBoundry on Hetzner** (approved target), `npx feltkit deploy --target appboundry` | **Blocked, not deployed.** Needs a portal URL and a deploy token. AppBoundry's own readiness document says routing/TLS is not implemented and customer execution is gated off | `✗ Deploying to AppBoundry needs APPBOUNDRY_URL (the AppBoundry portal), APPBOUNDRY_TOKEN (an AppBoundry deploy token).` The portal `https://appboundry.fly.dev` answers `401` (its contract's `AUTHENTICATION_REQUIRED`). AppBoundry `docs/feltkit-deploy-readiness.md`: "Nothing here is deployed", "Routing: designed, not implemented", "Untrusted execution in production: not ready". FK-GAP-009 |
-| **The artifact on the published AppBoundry runtime** (`@appport/appboundry@1.8.0`, production environment, local FeltDB state) | **Verified** | `deploy/verify-appboundry.sh`: 8/8 browser checks, the agent over HTTP, restart on the same state with data intact (`docs/screenshots/deployment-evidence.json`) |
+| **The artifact on the published AppBoundry runtime** (`@appport/appboundry@1.9.0`, production environment, local FeltDB state; the artifact requires `crypto@1`, which 1.9.0 provides) | **Verified** | `deploy/verify-appboundry.sh`: 8/8 browser checks, the agent over HTTP, restart on the same state with data intact (`docs/screenshots/deployment-evidence.json`) |
 | The artifact against the test suite | **Verified** | `MP_TARGET=artifact npm test`: 18/18 |
 
 No substitute hosting was provisioned. Nothing on the shared control plane was changed. There is no
@@ -24,7 +24,7 @@ npx feltkit build --target appboundry
 This writes `multiplayer.app/`:
 
 - `manifest.json`: 46 functions, 11 AppPort capabilities, 13 collections, roles, and host access.
-- `module.wasm`: 3.9 MB, no imports.
+- `module.wasm`: 3.9 MB, no imports. Host interfaces: collections, services, identity, web, transactions, and `crypto@1` (invitation codes), so it needs AppBoundry 1.9.0 or later.
 - `assets/`: the hashed frontend.
 
 The artifact runs without the source repository. AppBoundry verifies it before serving.

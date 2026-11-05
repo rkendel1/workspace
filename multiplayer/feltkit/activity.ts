@@ -1,13 +1,13 @@
 import { s } from "@feltdb/feltkit";
 import { activity, app, participants } from "./app.js";
-import { requireWorkspace } from "./_authz.js";
+import { loadWorkspace } from "./_authz.js";
 
 /** The workspace's audit trail of meaningful changes, newest first. Members only. */
 export const list = app.query({
   access: "activity.read",
   args: { workspaceId: s.string() },
   handler: async (ctx, { workspaceId }) => {
-    await requireWorkspace(ctx, workspaceId, "member");
+    await loadWorkspace(ctx, workspaceId);
     const page = await ctx.db.query(activity, { where: [{ field: "workspaceId", eq: workspaceId }], orderBy: [{ field: "at", direction: "desc" }], limit: 100 });
     const names = new Map<string, string>();
     const out = [];

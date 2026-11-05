@@ -1,25 +1,25 @@
 {
-  "measuredAt": "2026-11-05T01:51:24.060Z",
+  "measuredAt": "2026-11-05T16:19:41.906Z",
   "tool": "2.00",
-  "commit": "9cc2038",
+  "commit": "08a8136",
   "categories": {
     "Custom application code": {
       "files": 17,
-      "code": 2164,
-      "comment": 99,
+      "code": 2165,
+      "comment": 100,
       "blank": 163
     },
     "Custom data-model code": {
       "files": 1,
-      "code": 140,
-      "comment": 22,
+      "code": 141,
+      "comment": 23,
       "blank": 20
     },
     "Custom authorization code": {
       "files": 1,
-      "code": 51,
-      "comment": 17,
-      "blank": 8
+      "code": 94,
+      "comment": 33,
+      "blank": 16
     },
     "Custom real-time code": {
       "files": 1,
@@ -35,14 +35,14 @@
     },
     "Configuration": {
       "files": 5,
-      "code": 92,
-      "comment": 17,
+      "code": 94,
+      "comment": 16,
       "blank": 4
     },
     "Tests": {
       "files": 5,
-      "code": 652,
-      "comment": 41,
+      "code": 654,
+      "comment": 42,
       "blank": 44
     },
     "Generated code": {
@@ -58,8 +58,8 @@
       "blank": 15
     }
   },
-  "customTotal": 2507,
-  "appCodeShareOfCustom": 86.3,
+  "customTotal": 2552,
+  "appCodeShareOfCustom": 84.8,
   "authzCallSites": 43,
   "realtimeClientLines": 22,
   "unitTests": 18,
@@ -72,10 +72,10 @@
   },
   "framework": {
     "FeltKit SDK (packages/sdk/src)": {
-      "files": 80,
-      "code": 18708,
-      "comment": 3636,
-      "blank": 1624
+      "files": 82,
+      "code": 18830,
+      "comment": 3707,
+      "blank": 1636
     },
     "FeltKit Studio dashboard (packages/sdk/dashboard/src)": {
       "files": 24,
@@ -91,8 +91,8 @@
     },
     "AppBoundry host (packages/appboundry-host/src)": {
       "files": 24,
-      "code": 5172,
-      "comment": 778,
+      "code": 5181,
+      "comment": 780,
       "blank": 464
     }
   }

@@ -1,60 +1,60 @@
 {
   "base": "http://127.0.0.1:4100",
-  "at": "2026-11-05T01:34:56.979Z",
+  "at": "2026-11-05T16:18:21.800Z",
   "passed": 8,
   "failed": 0,
   "results": [
     {
       "name": "health: runtime reports ready with this build's module",
       "ok": true,
-      "ms": 11,
+      "ms": 17,
       "detail": {
         "status": "ready",
         "application": "multiplayer",
-        "module": "sha256:d9680914b26b4c031755d5294293ce127bfa78192c31b243b976b09a9bb44674",
+        "module": "sha256:798b05cede65f5602769a932ee48f20718b74cf9113fae0e820042260f5f5e1b",
         "environment": "production",
-        "startedAt": "2026-11-05T01:34:47.917Z"
+        "startedAt": "2026-11-05T16:18:12.384Z"
       }
     },
     {
       "name": "anonymous callers are refused",
       "ok": true,
-      "ms": 2
+      "ms": 4
     },
     {
       "name": "ada (operator-issued session) creates the sample workspace",
       "ok": true,
-      "ms": 1143
+      "ms": 1242
     },
     {
       "name": "grace joins by invitation",
       "ok": true,
-      "ms": 712
+      "ms": 548
     },
     {
       "name": "real-time delivery on AppBoundry",
       "ok": true,
-      "ms": 225,
+      "ms": 232,
       "detail": {
-        "latencyMs": 225
+        "latencyMs": 232
       }
     },
     {
       "name": "typing indicator on AppBoundry",
       "ok": true,
-      "ms": 270
+      "ms": 253
     },
     {
       "name": "file upload and authorized download on AppBoundry",
       "ok": true,
-      "ms": 374
+      "ms": 324
     },
     {
       "name": "agent process answers over HTTP with a persisted plan",
       "ok": true,
-      "ms": 1361,
+      "ms": 1391,
       "detail": {
-        "agentRoundTripMs": 802
+        "agentRoundTripMs": 809
       }
     }
   ]

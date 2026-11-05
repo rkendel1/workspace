@@ -1,6 +1,6 @@
 import { s } from "@feltdb/feltkit";
 import { app, presence } from "./app.js";
-import { requireChannel, requireWorkspace } from "./_authz.js";
+import { loadChannel, loadWorkspace } from "./_authz.js";
 
 /**
  * Presence and typing (FK-GAP-004). FeltKit has no ephemeral channel, so this is one bounded record
@@ -11,9 +11,9 @@ export const heartbeat = app.mutation({
   access: "presence.write",
   args: { workspaceId: s.string(), status: s.enum(["active", "away"]), typingIn: s.optional(s.string()) },
   handler: async (ctx, { workspaceId, status, typingIn }) => {
-    const { participant } = await requireWorkspace(ctx, workspaceId);
+    const { participant } = await loadWorkspace(ctx, workspaceId);
     if (typingIn) {
-      const { channel } = await requireChannel(ctx, typingIn, { write: true });
+      const { channel } = await loadChannel(ctx, typingIn);
       if (channel.workspaceId !== workspaceId) return;
     }
     const now = Date.now();

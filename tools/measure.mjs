@@ -51,7 +51,7 @@ for (const [name, files] of Object.entries(CATEGORIES)) rows[name] = cloc(files.
 // Authorization call sites inside handlers (application policy applied per function; FK-GAP-001).
 const handlerFiles = CATEGORIES["Custom application code"].filter((f) => f.startsWith("feltkit/")).concat(["feltkit/presence.ts"]);
 let authzCalls = 0;
-for (const f of handlerFiles) authzCalls += (readFileSync(join(ROOT, f), "utf8").match(/\b(requireWorkspace|requireChannel|readableChannels|myRequest)\(ctx/g) ?? []).length;
+for (const f of handlerFiles) authzCalls += (readFileSync(join(ROOT, f), "utf8").match(/\b(loadWorkspace|loadChannel|readableChannels|myRequest)\(ctx/g) ?? []).length;
 
 // Client-side real-time code inside the UI (presence heartbeat and typing), counted by marker lines.
 const ws = readFileSync(join(ROOT, "src/Workspace.tsx"), "utf8").split("\n");
@@ -86,7 +86,7 @@ console.log("Category".padEnd(40), "files".padStart(6), "code".padStart(7), "com
 for (const [k, v] of Object.entries(rows)) console.log(k.padEnd(40), String(v.files).padStart(6), String(v.code).padStart(7), String(v.comment).padStart(8));
 console.log("\nCustom total (app + model + authz + realtime + integration):", custom, "code lines");
 console.log("Custom application code share of custom:", result.appCodeShareOfCustom + "%");
-console.log("Authorization call sites in handlers:", authzCalls, " · client real-time lines in Workspace.tsx:", rtClient);
+console.log("Context-loader call sites in handlers (enforcement is in authorize):", authzCalls, " · client real-time lines in Workspace.tsx:", rtClient);
 console.log("Tests:", unitTests, "unit/integration tests,", e2eChecks, "browser e2e checks");
 console.log("Starter baseline (create-feltkit, commit", BASELINE + "):", starter.code, "code lines in", starter.files, "files");
 for (const [k, v] of Object.entries(framework)) console.log("Framework reused:", k, v.code, "code lines,", v.files, "files");

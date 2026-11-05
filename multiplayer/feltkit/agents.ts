@@ -7,7 +7,7 @@ const Context = s.object({
   channel: s.object({ id: s.string(), name: s.string(), kind: s.string(), topic: s.nullable(s.string()) }),
   messages: s.array(s.object({ id: s.string(), author: s.string(), handle: s.string(), authorKind: s.string(), text: s.string(), createdAt: s.number() })),
 });
-import { me, readableChannels, requireChannel, requireWorkspace } from "./_authz.js";
+import { me, readableChannels, loadChannel, loadWorkspace } from "./_authz.js";
 import { addToWorkspace, ensureRoomAgent, insertMessage, ROOM_AGENT } from "./_ops.js";
 import { record } from "./_util.js";
 
@@ -25,7 +25,7 @@ export const add = app.mutation({
   args: { workspaceId: s.string() },
   returns: s.string(),
   handler: async (ctx, { workspaceId }) => {
-    const { participant } = await requireWorkspace(ctx, workspaceId, "admin");
+    const { participant } = await loadWorkspace(ctx, workspaceId);
     const agentId = await ensureRoomAgent(ctx);
     await addToWorkspace(ctx, workspaceId, agentId, "agent", participant.id);
     await record(ctx, workspaceId, participant.id, "agent.added", `${participant.displayName} added @${ROOM_AGENT} to the workspace`, agentId);
@@ -36,7 +36,7 @@ export const add = app.mutation({
 async function myRequest(ctx: any, requestId: string) {
   const agent = await me(ctx);
   const req = await ctx.db.get(agentRequests, requestId);
-  if (!req || req.agentId !== agent.id) fail("NOT_FOUND", "Request not found.");
+  if (!req) fail("NOT_FOUND", "Request not found."); // ownership: feltkit/_authz.ts (AGENT_WORK)
   return { agent, req };
 }
 
@@ -82,7 +82,7 @@ export const context = app.query({
   capability: { name: "agent.context", description: "The conversation an agent request was made in, authorized by the agent's own membership." },
   handler: async (ctx, { requestId }) => {
     const { req } = await myRequest(ctx, requestId);
-    const { channel } = await requireChannel(ctx, req.channelId);
+    const { channel } = await loadChannel(ctx, req.channelId);
     const source = (await ctx.db.get(messages, req.messageId))!;
     // The thread the request was made in, or the channel's recent top-level messages.
     const scope = source.rootId
@@ -121,7 +121,7 @@ export const respond = app.mutation({
   handler: async (ctx, { requestId, text, plan }) => {
     const { agent, req } = await myRequest(ctx, requestId);
     if (req.status !== "working") fail("FAILED_PRECONDITION", `Request is ${req.status}; claim it first.`);
-    const { channel } = await requireChannel(ctx, req.channelId, { write: true });
+    const { channel } = await loadChannel(ctx, req.channelId);
     if (plan) ctx.auth.require("plans.write");
     const source = (await ctx.db.get(messages, req.messageId))!;
     const now = Date.now();
@@ -159,7 +159,7 @@ export const requests = app.query({
   access: "messages.read",
   args: { channelId: s.string() },
   handler: async (ctx, { channelId }) => {
-    await requireChannel(ctx, channelId);
+    await loadChannel(ctx, channelId);
     return (await ctx.db.find(agentRequests, { channelId })).map((r) => ({ id: r.id, messageId: r.messageId, status: r.status, error: r.error ?? null, replyId: r.replyId ?? null }));
   },
 });
@@ -172,7 +172,7 @@ export const plan = app.query({
   handler: async (ctx, { id }) => {
     const o = await ctx.db.get(sharedObjects, id);
     if (!o) fail("NOT_FOUND", "Plan not found.");
-    await requireChannel(ctx, o.channelId);
+    await loadChannel(ctx, o.channelId);
     const author = await ctx.db.get(participants, o.createdBy);
     return { ...o, createdByName: author?.displayName ?? "Unknown" };
   },
@@ -183,7 +183,7 @@ export const plans = app.query({
   access: "plans.read",
   args: { workspaceId: s.string() },
   handler: async (ctx, { workspaceId }) => {
-    const { participant, membership } = await requireWorkspace(ctx, workspaceId);
+    const { participant, membership } = await loadWorkspace(ctx, workspaceId);
     const readable = new Set((await readableChannels(ctx, workspaceId, participant.id, membership.role)).map((c) => c.id));
     return (await ctx.db.find(sharedObjects, { workspaceId }, { orderBy: [{ field: "createdAt", direction: "desc" }] }))
       .filter((o) => readable.has(o.channelId))

@@ -5,13 +5,17 @@ Platform: `@feltdb/feltkit` / `create-feltkit` 0.3.15, `@feltdb/core` 0.21.0, `@
 `@appport/services` 0.15.0, `@appport/appboundry` 1.8.0. Every number below comes from a command in
 [§17](#17-reproducible-measurement-commands). Estimates are labelled as estimates.
 
-> **Update 2026-11-05 (platform work after this build):**
-> - FK-GAP-001 is implemented in FeltKit as `feltkit({ authorize })` (local, unreleased).
-> - AppPort's subscription leak (FK-GAP-017) is fixed and scoped events are added (FK-GAP-004 prerequisite; local, unreleased).
-> - The register now has 18 gaps.
-> - Measured on Multiplayer, the hook centralizes enforcement but does **not** reduce code (net +39 lines). This corrects the ≈63-line estimate in §12 and §14.
+> **Update 2026-11-05: platform work released and adopted.**
 >
-> See [FELTKIT_GAP_REGISTER.md](FELTKIT_GAP_REGISTER.md) and [acceptance/feltkit-authorize/](acceptance/feltkit-authorize/). The numbers below are the original build's.
+> - **FK-GAP-001 (`feltkit({ authorize })`)** and **FK-GAP-010 (`ctx.crypto.token`, AppBoundry `crypto@1`)** shipped in `@feltdb/feltkit` 0.3.16 and `@appport/appboundry` 1.9.0. The AppPort subscription fix (FK-GAP-017) shipped in `@appport/server` 1.2.0.
+> - **Multiplayer now uses both, and the workarounds are gone:**
+>   - membership is enforced by one registered policy instead of in each handler;
+>   - invitation links carry 256-bit codes instead of record ids.
+> - **Re-measured:** custom code 2,552 lines (was 2,507). Centralizing authorization costs lines but buys the guarantees in the register.
+> - **Re-verified:** 18/18 tests on the runtime and on the artifact, 16/16 two-session e2e, 8/8 deployment checks on AppBoundry 1.9.0.
+> - **Still in place**, because those gaps are open: presence records (FK-GAP-004's FeltKit half), the agent queue (008), base64 file transfer (007) and scan search (006).
+>
+> See [FELTKIT_GAP_REGISTER.md](FELTKIT_GAP_REGISTER.md). Below is the original build's report.
 
 ## Executive summary (for the FeltKit website)
 

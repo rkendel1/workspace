@@ -35,7 +35,7 @@ export async function setup() {
   for (const c of [ada, grace, mallory]) await c.mutation(api.me.ensure, {});
   const ws = await ada.mutation(api.workspaces.create, { name: "Acme" });
   const inv = await ada.mutation(api.invitations.create, { workspaceId: ws, role: "member" });
-  await grace.mutation(api.invitations.accept, { code: inv.id });
+  await grace.mutation(api.invitations.accept, { code: inv.code });
   const channels = await ada.query(api.channels.list, { workspaceId: ws });
   const general = channels.find((c: any) => c.name === "general")!.id;
   const malloryWs = await mallory.mutation(api.workspaces.create, { name: "Evil Corp" });

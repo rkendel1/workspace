@@ -8,7 +8,7 @@
 #   deploy/verify-appboundry.sh            (from multiplayer/; needs Node 22 and Playwright/Chromium)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-RUNTIME_VERSION="${APPBOUNDRY_VERSION:-1.8.0}"
+RUNTIME_VERSION="${APPBOUNDRY_VERSION:-1.9.0}"
 PORT="${PORT:-4100}"
 WORK="$(mktemp -d)"
 STATE="$WORK/state"

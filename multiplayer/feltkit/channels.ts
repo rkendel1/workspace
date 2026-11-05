@@ -1,6 +1,6 @@
 import { fail, s } from "@feltdb/feltkit";
 import { app, channelMembers, channels, memberships, messages, participants } from "./app.js";
-import { atLeast, me, readableChannels, requireChannel, requireWorkspace } from "./_authz.js";
+import { atLeast, me, readableChannels, loadChannel, loadWorkspace } from "./_authz.js";
 import { joinChannel } from "./_ops.js";
 import { channelName, record } from "./_util.js";
 
@@ -11,7 +11,7 @@ export const list = app.query({
   access: "channels.read",
   args: { workspaceId: s.string() },
   handler: async (ctx, { workspaceId }) => {
-    const { participant, membership } = await requireWorkspace(ctx, workspaceId);
+    const { participant, membership } = await loadWorkspace(ctx, workspaceId);
     const visible = await readableChannels(ctx, workspaceId, participant.id, membership.role);
     const mine = new Map((await ctx.db.find(channelMembers, { workspaceId, participantId: participant.id })).map((m) => [m.channelId, m]));
     const out = [];
@@ -48,7 +48,7 @@ export const get = app.query({
   access: "channels.read",
   args: { channelId: s.string() },
   handler: async (ctx, { channelId }) => {
-    const { channel, member, membership } = await requireChannel(ctx, channelId);
+    const { channel, member, membership } = await loadChannel(ctx, channelId);
     const members = [];
     for (const m of await ctx.db.find(channelMembers, { channelId })) {
       const p = await ctx.db.get(participants, m.participantId);
@@ -68,7 +68,7 @@ export const create = app.mutation({
   returns: s.string(),
   capability: { name: "channels.create", description: "Create a public or private channel in a workspace the caller belongs to." },
   handler: async (ctx, { workspaceId, name, kind, topic }) => {
-    const { participant } = await requireWorkspace(ctx, workspaceId, "member");
+    const { participant } = await loadWorkspace(ctx, workspaceId);
     const clean = channelName(name);
     if (!clean) fail("INVALID_ARGUMENT", "Channel names use letters, numbers and dashes.");
     const taken = (await ctx.db.find(channels, { workspaceId, name: clean })).some((c) => c.kind === "public" || c.kind === "private");
@@ -84,7 +84,7 @@ export const setTopic = app.mutation({
   access: "channels.write",
   args: { channelId: s.string(), topic: s.string({ maxLength: 250 }) },
   handler: async (ctx, { channelId, topic }) => {
-    const { channel } = await requireChannel(ctx, channelId, { write: true });
+    const { channel } = await loadChannel(ctx, channelId);
     if (channel.kind === "dm") fail("FAILED_PRECONDITION", "Direct messages have no topic.");
     await ctx.db.patch(channels, channelId, { topic: topic.trim() || undefined });
   },
@@ -95,7 +95,7 @@ export const join = app.mutation({
   access: "channels.write",
   args: { channelId: s.string() },
   handler: async (ctx, { channelId }) => {
-    const { channel, participant } = await requireChannel(ctx, channelId);
+    const { channel, participant } = await loadChannel(ctx, channelId);
     if (channel.kind !== "public") fail("FORBIDDEN", "Only public channels can be joined.");
     await joinChannel(ctx, channel.workspaceId, channelId, participant.id);
   },
@@ -105,7 +105,7 @@ export const leave = app.mutation({
   access: "channels.write",
   args: { channelId: s.string() },
   handler: async (ctx, { channelId }) => {
-    const { channel, member, participant } = await requireChannel(ctx, channelId);
+    const { channel, member, participant } = await loadChannel(ctx, channelId);
     if (!member) return;
     if (channel.isDefault) fail("FAILED_PRECONDITION", `Everyone stays in #${channel.name}.`);
     if (channel.kind === "dm") fail("FAILED_PRECONDITION", "You cannot leave a direct message.");
@@ -119,7 +119,7 @@ export const addMembers = app.mutation({
   access: "channels.write",
   args: { channelId: s.string(), participantIds: s.array(s.string(), { minItems: 1, maxItems: 50 }) },
   handler: async (ctx, { channelId, participantIds }) => {
-    const { channel, participant } = await requireChannel(ctx, channelId, { write: true });
+    const { channel, participant } = await loadChannel(ctx, channelId);
     if (channel.kind === "dm") fail("FAILED_PRECONDITION", "Start a group conversation to add people.");
     const names = [];
     for (const pid of participantIds) {
@@ -139,7 +139,7 @@ export const openConversation = app.mutation({
   returns: s.string(),
   capability: { name: "conversations.open", description: "Open a direct message or group conversation with workspace members." },
   handler: async (ctx, { workspaceId, participantIds }) => {
-    const { participant } = await requireWorkspace(ctx, workspaceId);
+    const { participant } = await loadWorkspace(ctx, workspaceId);
     const ids = [...new Set([participant.id, ...participantIds])].sort();
     for (const pid of ids) {
       if (!(await ctx.db.find(memberships, { workspaceId, participantId: pid })).length) fail("NOT_FOUND", "Someone in that conversation is not in this workspace.");
@@ -159,7 +159,7 @@ export const markRead = app.mutation({
   access: "channels.write",
   args: { channelId: s.string(), seq: s.number() },
   handler: async (ctx, { channelId, seq }) => {
-    const { member } = await requireChannel(ctx, channelId);
+    const { member } = await loadChannel(ctx, channelId);
     if (member && seq > member.lastReadSeq) await ctx.db.patch(channelMembers, member.id, { lastReadSeq: seq });
   },
 });

@@ -1,6 +1,6 @@
 import { fail, s } from "@feltdb/feltkit";
 import { app, channelMembers, channels, memberships, participants, presence, workspaces } from "./app.js";
-import { atLeast, me, requireWorkspace } from "./_authz.js";
+import { atLeast, me, loadWorkspace } from "./_authz.js";
 import { addToWorkspace, joinChannel } from "./_ops.js";
 import { record } from "./_util.js";
 
@@ -27,7 +27,7 @@ export const get = app.query({
   access: "workspaces.read",
   args: { workspaceId: s.string() },
   handler: async (ctx, { workspaceId }) => {
-    const { membership } = await requireWorkspace(ctx, workspaceId);
+    const { membership } = await loadWorkspace(ctx, workspaceId);
     const w = (await ctx.db.get(workspaces, workspaceId))!;
     const ms = await ctx.db.find(memberships, { workspaceId });
     const pres = new Map((await ctx.db.find(presence, { workspaceId })).map((p) => [p.participantId, p]));
@@ -51,7 +51,7 @@ export const update = app.mutation({
   access: "workspaces.write",
   args: { workspaceId: s.string(), name: s.string({ minLength: 1, maxLength: 60 }), description: s.optional(s.string({ maxLength: 280 })) },
   handler: async (ctx, { workspaceId, name, description }) => {
-    const { participant } = await requireWorkspace(ctx, workspaceId, "admin");
+    const { participant } = await loadWorkspace(ctx, workspaceId);
     await ctx.db.patch(workspaces, workspaceId, { name: name.trim(), description: description?.trim() || undefined });
     await record(ctx, workspaceId, participant.id, "workspace.updated", `${participant.displayName} renamed the workspace to ${name.trim()}`);
   },
@@ -61,7 +61,7 @@ export const setRole = app.mutation({
   access: "workspaces.write",
   args: { workspaceId: s.string(), participantId: s.string(), role: s.enum(["admin", "member", "guest"]) },
   handler: async (ctx, { workspaceId, participantId, role }) => {
-    const { participant, membership } = await requireWorkspace(ctx, workspaceId, "admin");
+    const { participant, membership } = await loadWorkspace(ctx, workspaceId);
     const [target] = await ctx.db.find(memberships, { workspaceId, participantId });
     if (!target) fail("NOT_FOUND", "That person is not in this workspace.");
     if (target.role === "owner" || target.role === "agent") fail("FAILED_PRECONDITION", `The ${target.role} role cannot be changed here.`);
@@ -78,7 +78,7 @@ export const removeMember = app.mutation({
   access: "workspaces.write",
   args: { workspaceId: s.string(), participantId: s.string() },
   handler: async (ctx, { workspaceId, participantId }) => {
-    const { participant, membership } = await requireWorkspace(ctx, workspaceId);
+    const { participant, membership } = await loadWorkspace(ctx, workspaceId);
     const self = participantId === participant.id;
     if (!self && !atLeast(membership.role, "admin")) fail("FORBIDDEN", "Only admins can remove members.");
     const [target] = await ctx.db.find(memberships, { workspaceId, participantId });

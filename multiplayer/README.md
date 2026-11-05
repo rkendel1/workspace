@@ -1,6 +1,6 @@
 # Multiplayer
 
-A real-time workspace for people and agents, built with [FeltKit](https://www.npmjs.com/package/@feltdb/feltkit) 0.3.15.
+A real-time workspace for people and agents, built with [FeltKit](https://www.npmjs.com/package/@feltdb/feltkit) 0.3.16.
 Workspaces, public and private channels, direct and group messages, threads, reactions, files, search,
 presence, typing, unread counts, notifications, invitations, roles, an audit trail, and a room agent
 (`@assistant`) that reads a conversation and writes a persisted project plan back into it.
@@ -79,7 +79,7 @@ browser checks, including a restart. See [../docs/DEPLOYMENT.md](../docs/DEPLOYM
 | Path | What it is |
 |---|---|
 | `feltkit/app.ts` | Roles, services, and the 13 collections (the data model) |
-| `feltkit/_authz.ts` | Workspace/channel authorization. Every handler that takes an id goes through it |
+| `feltkit/_authz.ts` | The authorization policy, registered as `feltkit({ authorize })`: workspace and conversation membership for every function on every interface (default deny), plus loaders handlers use for context |
 | `feltkit/_ops.ts`, `_util.ts`, `_base64.ts` | Shared write helpers, mention parsing, the file byte codec |
 | `feltkit/workspaces.ts` … `agents.ts` | Queries and mutations (`<module>:<export>`), 11 of them published as AppPort capabilities |
 | `feltkit/demo.ts` | The sample workspace |

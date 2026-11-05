@@ -1,18 +1,17 @@
 /**
  * Multiplayer: a workspace where people and agents talk, share files and produce work together.
  *
- * Authority has two layers, and both are enforced on the server for every call:
- *   1. Application roles (below) grant AppPort permissions: which functions a principal may call
- *      at all. FeltKit/AppPort enforce these on HTTP, AppPort and MCP alike.
- *   2. Workspace and channel membership (`memberships`, `channelMembers`) decide which records a
- *      caller may touch. FeltKit roles are application-wide, so this layer is application code:
- *      feltkit/_authz.ts. Every function that takes an id resolves it through that module.
+ * Authority has two layers, both enforced by FeltKit for every call on every interface:
+ *   1. Application roles (below) grant AppPort permissions: which functions a principal may call.
+ *   2. `authorize` (feltkit/_authz.ts) decides which workspace and conversation records the caller
+ *      may touch, from the validated arguments and the stored memberships. Handlers do not repeat it.
  *
  * Durable records (messages, memberships, plans, activity) live in this app's FeltDB instance.
  * Presence and typing are short-lived, bounded state: one overwritten record per participant per
  * workspace (see presence.ts and the build report for why).
  */
 import { feltkit, s } from "@feltdb/feltkit";
+import { authorize } from "./_authz.js";
 
 const HUMAN = [
   "workspaces.*", "channels.*", "messages.*", "invitations.*", "presence.*",
@@ -30,6 +29,8 @@ export const app = feltkit({
     admin: ["intelligence.*", "credential.*", "configuration.*", "apikeys.*", "webhooks.*", "jobs.*", "schedules.*", "feltkit.operations.*"],
   },
   auth: { accounts: { roles: ["member"] } },
+  // Workspace and conversation membership: one policy for every function (feltkit/_authz.ts).
+  authorize,
   dev: {
     users: [
       { id: "ada", name: "Ada Lovelace", roles: ["member", "admin"] },
@@ -85,6 +86,8 @@ export const memberships = app.collection("memberships", {
 
 export const invitations = app.collection("invitations", {
   workspaceId: s.ref(workspaces),
+  /** The bearer code in the invitation link: 32 random bytes from ctx.crypto.token(), never the record id. */
+  code: s.string({ minLength: 40 }),
   role: s.enum(["admin", "member", "guest"]),
   note: s.optional(s.string({ maxLength: 120 })),
   createdBy: s.string(),
@@ -93,7 +96,7 @@ export const invitations = app.collection("invitations", {
   status: s.enum(["open", "accepted", "revoked"]),
   acceptedBy: s.optional(s.string()),
   acceptedAt: s.optional(s.number()),
-}, { indexes: [{ fields: ["workspaceId"] }] });
+}, { unique: [["code"]], indexes: [{ fields: ["workspaceId"] }] });
 
 // ── Conversations ───────────────────────────────────────────────────────────
 

@@ -693,7 +693,7 @@ function Invite({ workspaceId, myRole, onClose, toasts }: { workspaceId: string;
   const [note, setNote] = useState("");
   const [link, setLink] = useState<string | null>(null);
   const linkFor = (id: string) => `${location.origin}/?invite=${id}`;
-  const submit = async (e: FormEvent) => { e.preventDefault(); try { const r = await create({ workspaceId, role, ...(note.trim() ? { note } : {}) }); setLink(linkFor(r.id)); setNote(""); } catch (err) { toasts.error(err); } };
+  const submit = async (e: FormEvent) => { e.preventDefault(); try { const r = await create({ workspaceId, role, ...(note.trim() ? { note } : {}) }); setLink(linkFor(r.code)); setNote(""); } catch (err) { toasts.error(err); } };
   return (
     <Modal title="Invite people" onClose={onClose} wide>
       <form className="stack" onSubmit={submit}>
@@ -707,7 +707,7 @@ function Invite({ workspaceId, myRole, onClose, toasts }: { workspaceId: string;
       <p className="muted small">Links work once and expire after 7 days. Anyone holding a link can join, so share it privately.</p>
       <h3>Invitations</h3>
       {!list.data ? <p className="muted">Loading…</p> : !list.data.length ? <p className="muted small">None yet.</p> : (
-        <ul className="invites">{list.data.map((i) => <li key={i.id}><span className={`status ${i.status}`}>{i.status}</span><span className="grow">{i.role}{i.note ? ` · ${i.note}` : ""} <span className="muted small">· {ago(i.createdAt)}</span></span>{i.status === "open" && <><button className="ghost small" onClick={() => void navigator.clipboard?.writeText(linkFor(i.id)).then(() => toasts.info("Link copied."), () => undefined)}>Copy link</button><button className="ghost small danger" onClick={() => void revoke({ invitationId: i.id }).catch(toasts.error)}>Revoke</button></>}</li>)}</ul>
+        <ul className="invites">{list.data.map((i) => <li key={i.id}><span className={`status ${i.status}`}>{i.status}</span><span className="grow">{i.role}{i.note ? ` · ${i.note}` : ""} <span className="muted small">· {ago(i.createdAt)}</span></span>{i.status === "open" && i.code && <><button className="ghost small" onClick={() => void navigator.clipboard?.writeText(linkFor(i.code!)).then(() => toasts.info("Link copied."), () => undefined)}>Copy link</button><button className="ghost small danger" onClick={() => void revoke({ invitationId: i.id }).catch(toasts.error)}>Revoke</button></>}</li>)}</ul>
       )}
     </Modal>
   );

@@ -2,22 +2,21 @@
   "schema": "feltkit-gap-register/1",
   "project": "Multiplayer (rkendel1/workspace, multiplayer/)",
   "platformVersions": {
-    "@feltdb/feltkit": "0.3.15",
-    "create-feltkit": "0.3.15",
+    "@feltdb/feltkit": "0.3.16",
+    "create-feltkit": "0.3.16",
     "@feltdb/core": "0.21.0",
     "@appport/sdk": "1.4.0",
     "@appport/services": "0.15.0",
-    "@appport/appboundry": "1.8.0"
+    "@appport/appboundry": "1.9.0",
+    "@appport/sdk (released, not yet used by FeltKit 0.3.16)": "1.5.0",
+    "@appport/server (released, not yet used by FeltKit 0.3.16)": "1.2.0"
   },
   "platformRevisions": {
-    "rkendel1/feltkit": "50bc617",
-    "rkendel1/appboundry": "94502ef",
-    "rkendel1/appport": "e9815a5",
+    "rkendel1/feltkit": "b349543 (main; includes f20ed78, 7f8e71d, a65a38e)",
+    "rkendel1/appport": "c637e8e (main; includes f1f8c21)",
+    "rkendel1/appboundry": "7dc1510 (main; includes c925d91)",
     "rkendel1/authboundry": "b8ed659",
-    "rkendel1/appport-services": "ac20b5a",
-    "rkendel1/feltkit (work)": "f20ed78, 7f8e71d, a65a38e on claude/product-primitives (local, unpushed, unreleased)",
-    "rkendel1/appport (work)": "f1f8c21 on claude/scoped-event-authorization (local, unpushed, unreleased)",
-    "rkendel1/appboundry (work)": "c925d91 on claude/crypto-host-interface (local, unpushed, unreleased)"
+    "rkendel1/appport-services": "ac20b5a"
   },
   "classifications": [
     "missing-capability",
@@ -48,8 +47,8 @@
       ],
       "wanted": "Declare once, beside roles, that functions taking a workspaceId/channelId/messageId require membership, and have the decision recorded by AppPort with a decision id on every interface.",
       "provided": "Role/permission checks at every boundary; ctx.auth.require(permission) inside handlers.",
-      "implementedManually": "feltkit/_authz.ts: loads the target record from the id the client sent, resolves the caller's participant and membership, and refuses NOT_FOUND/FORBIDDEN. Called at the top of every handler that takes an id.",
-      "workaround": "Centralized helper module called explicitly by each handler; transport-independent (runs inside the function, so HTTP, AppPort and MCP calls all pass through it).",
+      "implementedManually": "Nothing beyond the application's own policy (feltkit/_authz.ts `authorize`), which belongs to the application.",
+      "workaround": "Removed (2026-11-05).",
       "customLoc": "51 (feltkit/_authz.ts) + 43 call sites in handlers = ~94 code lines. Of these ~20 lines of plumbing (load record → resolve workspace → find membership) and the 43 call sites would disappear; ~30 lines of membership policy are application-specific and would relocate into the registered authorizer. — MEASURED after the primitive (consumer run): net +39 lines; 37 call sites remain as loaders. See resolution.measuredEffect.",
       "estimatedHours": "2–3 h (design + every handler + 9 security tests' worth of cases)",
       "codeFate": "Relocates and gains guarantees; does not shrink Multiplayer (measured).",
@@ -58,7 +57,7 @@
       "dependencies": [],
       "severity": "high",
       "priority": "P1",
-      "status": "implemented in FeltKit (local commit f20ed78, unreleased); consumer acceptance passed",
+      "status": "closed — released in @feltdb/feltkit 0.3.16; adopted by Multiplayer (workaround removed)",
       "codeKind": "platform integration glue (call sites, plumbing) + application policy (rules)",
       "resolution": {
         "date": "2026-11-05",
@@ -83,14 +82,15 @@
           "packages/sdk/test/authorize.test.ts: 10 tests — decision from args + stored records; order (roles → validation → hook); AppPort dispatch; a real MCP client; denial evidence incl. NOT_FOUND concealment; commit fence (membership revoked mid-call → CONFLICT, nothing written); live read set; a real live-query client denied on revocation; fail closed (throw / garbage / write attempt); the compiled AppBoundry artifact",
           "Full FeltKit suite: 389/389 (baseline 379/379)"
         ],
-        "consumer": "acceptance/feltkit-authorize/run.sh: local FeltKit packed into a scratch copy of Multiplayer; Multiplayer's 18 tests pass unchanged (no regression), and pass again with the whole membership policy in one feltkit({ authorize }) hook while _authz.ts's requireWorkspace/requireChannel enforce nothing.",
+        "consumer": "acceptance/feltkit-authorize/run.sh: local FeltKit packed into a scratch copy of Multiplayer; Multiplayer's 18 tests pass unchanged (no regression), and pass again with the whole membership policy in one feltkit({ authorize }) hook while _authz.ts's requireWorkspace/requireChannel enforce nothing. (Pre-release scaffolding: the script patched a scratch copy before the package was published. Removed after adoption; it remains in history at commit 08a8136.)",
         "measuredEffect": "Code size did not shrink: _authz.ts 51 → 45 lines, hook +45, net +39; 37 call sites remain as context loaders (participant, role, channel). The gain is guarantees: one policy on every function and interface, default-deny for functions the policy does not recognise, decision fenced at commit, live revocation, recorded decisions. The earlier estimate (≈63 lines disappear) was wrong and is corrected here.",
         "remaining": [
           "Not released (needs approval to publish @feltdb/feltkit).",
           "A central hook relies on argument naming (Multiplayer's presence:heartbeat names its channel `typingIn`; the first consumer run caught it). Proposal: optional per-function `resource: (args) => ({ type, id })` declaration so the policy does not infer from names.",
           "AppPort decisions cannot express NOT_FOUND (AppPort A9); FeltKit accepts fail('NOT_FOUND') from the hook.",
           "Unverified on the real AppBoundry runtime (@appport/appboundry): the guest change ships in the artifact, but the published runtime was not rebuilt with it here; FeltKit's reference host (createArtifactTestApp) passes."
-        ]
+        ],
+        "released": "Merged to rkendel1/feltkit main; published @feltdb/feltkit 0.3.16 (2026-11-05). Multiplayer adopted it: feltkit/_authz.ts is now the single policy registered as feltkit({ authorize }); requireWorkspace/requireChannel (per-handler enforcement) were replaced by loadWorkspace/loadChannel, which only load. Verified: 18/18 tests on FeltKit's runtime and on the compiled artifact; 16/16 two-session e2e; deployment verification 8/8 on @appport/appboundry 1.9.0. Measured: _authz.ts 51 → 94 code lines (policy + loaders), custom total 2,507 → 2,552; 43 loader call sites remain, none enforcing."
       }
     },
     {
@@ -187,7 +187,7 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "partially addressed — AppPort prerequisite implemented locally (f1f8c21, unreleased); FeltKit integration blocked on an AppPort release (publishing needs approval)",
+      "status": "partially addressed — AppPort half released (scoped events, subscription authorization); FeltKit integration not built (FeltKit 0.3.16 still on @appport/sdk 1.4.0). Multiplayer keeps its bounded presence records until then.",
       "codeKind": "platform integration glue (workaround)",
       "resolution": {
         "date": "2026-11-05",
@@ -207,7 +207,8 @@
           "FeltKit integration: declare events in feltkit({...}), publish from functions with scope, client subscribe; the FeltKit authorize hook then decides scopes (e.g. workspace membership).",
           "AppPort client/transport API to pass `scope` (protocol and server done; client SDK not changed).",
           "Compatibility: an AppPort app with no authorizer (publicOnlyAuthorizer) can no longer open permissioned subscriptions from session.permissions alone."
-        ]
+        ],
+        "released": "AppPort half published (see FK-GAP-017). Next: FeltKit adopts @appport/sdk 1.5.0 / server 1.2.0 and exposes scoped events; then Multiplayer's presence collection and heartbeat mutation are removed."
       }
     },
     {
@@ -384,8 +385,8 @@
       ],
       "wanted": "Invitation codes with >=128 bits of entropy, revocable, single use, that work on every runtime.",
       "provided": "Record ids (48 random bits). Sessions/API keys exist but are for principals, not app-level links.",
-      "implementedManually": "Invitation = record id used as the code; single use, 7-day expiry, revocable, audited.",
-      "workaround": "Accepted 48-bit codes, documented as a known limitation; mitigated by expiry, single use and revocation (no rate limiting).",
+      "implementedManually": "Nothing.",
+      "workaround": "Removed (2026-11-05).",
       "customLoc": "0 after the primitive (consumer: one call)",
       "estimatedHours": "0.5 h",
       "codeFate": "Invitation code generation would become one platform call; the invitation lifecycle stays app code.",
@@ -394,7 +395,7 @@
       "dependencies": [],
       "severity": "medium",
       "priority": "P2",
-      "status": "implemented in FeltKit and AppBoundry (local commits, unreleased); consumer acceptance passed",
+      "status": "closed — released in @feltdb/feltkit 0.3.16 and @appport/appboundry 1.9.0 (crypto@1); adopted by Multiplayer (workaround removed)",
       "codeKind": "—",
       "resolution": {
         "date": "2026-11-05",
@@ -416,12 +417,13 @@
           "Cross-runtime: FeltKit-built artifacts run on AppBoundry's runtime host (local build): crypto@1 tokens drawn by AppBoundry; the authorize hook (FK-GAP-001) enforced inside the artifact. The published @appport/appboundry 1.8.0 refuses the crypto artifact at load (ARTIFACT_INTERFACE_UNSUPPORTED) and loads the authorize artifact.",
           "FeltKit full suite: 392/392 (391 + the docs-citation test re-run after a docs fix)"
         ],
-        "consumer": "acceptance/feltkit-crypto-token/run.sh: Multiplayer's invitation codes become ctx.crypto.token() values (stored, unique, looked up by code) in a scratch copy on the local FeltKit — runtime: 18/18; compiled artifact: 18/18 (manifest declares crypto@1).",
+        "consumer": "acceptance/feltkit-crypto-token/run.sh: Multiplayer's invitation codes become ctx.crypto.token() values (stored, unique, looked up by code) in a scratch copy on the local FeltKit — runtime: 18/18; compiled artifact: 18/18 (manifest declares crypto@1). (Pre-release scaffolding: the script patched a scratch copy before the package was published. Removed after adoption; it remains in history at commit 08a8136.)",
         "measuredEffect": "Invitation codes go from 48 random bits + a timestamp (record id) to 256 random bits. Code change in the consumer: one call to create the code and lookups by `code` instead of by id (+1 collection field, unique).",
         "remaining": [
           "Not released (FeltKit and AppBoundry publishing need approval). Until AppBoundry ships crypto@1, an artifact using ctx.crypto.token cannot run on the published runtime (refused at load, clearly).",
           "No rate limiting of invitation attempts (application/edge concern)."
-        ]
+        ],
+        "released": "Published @feltdb/feltkit 0.3.16 and @appport/appboundry 1.9.0 (advertises crypto@1). Multiplayer adopted it: invitations carry `code` (ctx.crypto.token(), 256 bits, unique) — the record id is no longer the bearer code; accept/preview look up by code, revoke/list use the id; the UI builds links from the code. The artifact declares crypto@1 and runs on the published runtime (deploy/verify-appboundry.sh, 8/8). A test asserts a record id is refused as a code."
       }
     },
     {
@@ -636,7 +638,10 @@
       "dependencies": [],
       "severity": "high",
       "priority": "P1",
-      "status": "fixed in AppPort locally (f1f8c21, unreleased, unpushed); needs review and release"
+      "status": "closed — released in AppPort (@appport/protocol 1.4.0, core 1.6.0, server 1.2.0, sdk 1.5.0, authorization 1.0.8)",
+      "resolution": {
+        "released": "Merged to rkendel1/appport main and published. Note: @feltdb/feltkit 0.3.16 still pins @appport/sdk 1.4.0 / @appport/server 1.1.5 (the pre-fix server). FeltKit apps declare no AppPort events, so there is nothing for the old subscription path to leak, but FeltKit should adopt the fixed release."
+      }
     },
     {
       "id": "FK-GAP-018",
@@ -675,7 +680,7 @@
     "method": "cloc 2.00 on each file (tools/measure.mjs); function-level counts by non-blank, non-comment lines of the named exports"
   },
   "roadmap": {
-    "updated": "2026-11-05",
+    "updated": "2026-11-05 (after release)",
     "criteria": [
       "custom code eliminated (measured)",
       "apps that benefit",
@@ -686,7 +691,7 @@
     ],
     "tiers": [
       {
-        "name": "Done locally — awaiting review and release",
+        "name": "Released and adopted",
         "items": [
           {
             "gaps": [
@@ -694,24 +699,23 @@
             ],
             "change": "feltkit({ authorize })",
             "owner": "FeltKit",
-            "state": "implemented, tested (389/389), consumer acceptance passed; unreleased"
-          },
-          {
-            "gaps": [
-              "FK-GAP-017",
-              "FK-GAP-004"
-            ],
-            "change": "AppPort: subscriptions and deliveries authorized by the application Authorizer; scoped events",
-            "owner": "AppPort",
-            "state": "implemented, tested (1812 passed); unreleased; unblocks FeltKit ephemeral realtime"
+            "state": "@feltdb/feltkit 0.3.16; Multiplayer adopted (enforcement removed from handlers)"
           },
           {
             "gaps": [
               "FK-GAP-010"
             ],
-            "change": "ctx.crypto.token + AppBoundry host interface crypto@1",
+            "change": "ctx.crypto.token + host interface crypto@1",
             "owner": "FeltKit + AppBoundry",
-            "state": "implemented, tested, consumer acceptance passed; unreleased"
+            "state": "@feltdb/feltkit 0.3.16, @appport/appboundry 1.9.0; Multiplayer adopted (256-bit invitation codes)"
+          },
+          {
+            "gaps": [
+              "FK-GAP-017"
+            ],
+            "change": "AppPort: subscriptions and deliveries authorized by the application Authorizer; scoped events",
+            "owner": "AppPort",
+            "state": "@appport/server 1.2.0 (sdk 1.5.0, core 1.6.0, protocol 1.4.0)"
           }
         ]
       },
@@ -720,11 +724,20 @@
         "items": [
           {
             "gaps": [
+              "FK-GAP-004",
+              "FK-GAP-017"
+            ],
+            "change": "FeltKit adopts AppPort sdk 1.5.0 / server 1.2.0 (the fixed subscription path) — prerequisite for scoped events in FeltKit",
+            "owner": "FeltKit",
+            "state": "not started (0.3.16 pins sdk 1.4.0 / server 1.1.5)"
+          },
+          {
+            "gaps": [
               "FK-GAP-004"
             ],
             "change": "FeltKit integration of AppPort scoped events (publish from functions, client subscribe, scopes decided by the authorize hook)",
             "owner": "FeltKit",
-            "state": "blocked on AppPort release"
+            "state": "unblocked (AppPort released); not started"
           },
           {
             "gaps": [

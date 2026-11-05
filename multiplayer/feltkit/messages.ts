@@ -1,6 +1,6 @@
 import { fail, s } from "@feltdb/feltkit";
 import { agentRequests, app, attachments, memberships, messages, participants, reactions, sharedObjects } from "./app.js";
-import { readableChannels, requireChannel, requireWorkspace } from "./_authz.js";
+import { readableChannels, loadChannel, loadWorkspace } from "./_authz.js";
 import { insertMessage, joinChannel } from "./_ops.js";
 import { mentionedHandles, record } from "./_util.js";
 
@@ -46,7 +46,7 @@ export const list = app.query({
   access: "messages.read",
   args: { channelId: s.string(), beforeSeq: s.optional(s.number()) },
   handler: async (ctx, { channelId, beforeSeq }) => {
-    const { participant } = await requireChannel(ctx, channelId);
+    const { participant } = await loadChannel(ctx, channelId);
     const where: any[] = [{ field: "channelId", eq: channelId }, { field: "topLevel", eq: true }];
     if (beforeSeq !== undefined) where.push({ field: "seq", lt: beforeSeq });
     const page = await ctx.db.query(messages, { where, orderBy: [{ field: "seq", direction: "desc" }], limit: PAGE });
@@ -62,7 +62,7 @@ export const thread = app.query({
   handler: async (ctx, { rootId }) => {
     const root = await ctx.db.get(messages, rootId);
     if (!root) fail("NOT_FOUND", "Message not found.");
-    const { participant } = await requireChannel(ctx, root.channelId);
+    const { participant } = await loadChannel(ctx, root.channelId);
     const replies = await ctx.db.find(messages, { rootId }, { orderBy: [{ field: "seq", direction: "asc" }] });
     const [r, ...rest] = await present(ctx, [root, ...replies], participant.id);
     return { root: r!, replies: rest };
@@ -79,7 +79,7 @@ export const send = app.mutation({
   returns: s.object({ id: s.string(), seq: s.number() }),
   capability: { name: "messages.post", description: "Post a message (or a thread reply) in a conversation the caller belongs to. @handles mention members." },
   handler: async (ctx, { channelId, text, rootId, attachmentIds, sharedObjectId }) => {
-    const { channel, participant } = await requireChannel(ctx, channelId, { write: true });
+    const { channel, participant } = await loadChannel(ctx, channelId);
     const body = text.trim();
     if (!body && !attachmentIds?.length) fail("INVALID_ARGUMENT", "A message needs text or a file.");
     let root = null;
@@ -137,7 +137,7 @@ export const edit = app.mutation({
   handler: async (ctx, { messageId, text }) => {
     const m = await ctx.db.get(messages, messageId);
     if (!m) fail("NOT_FOUND", "Message not found.");
-    const { participant } = await requireChannel(ctx, m.channelId, { write: true });
+    const { participant } = await loadChannel(ctx, m.channelId);
     if (m.authorId !== participant.id) fail("FORBIDDEN", "You can only edit your own messages.");
     if (m.deletedAt) fail("FAILED_PRECONDITION", "That message was deleted.");
     await ctx.db.patch(messages, messageId, { text: text.trim(), editedAt: Date.now() });
@@ -151,7 +151,7 @@ export const remove = app.mutation({
   handler: async (ctx, { messageId }) => {
     const m = await ctx.db.get(messages, messageId);
     if (!m) fail("NOT_FOUND", "Message not found.");
-    const { participant, membership } = await requireChannel(ctx, m.channelId);
+    const { participant, membership } = await loadChannel(ctx, m.channelId);
     const moderator = membership.role === "owner" || membership.role === "admin";
     if (m.authorId !== participant.id && !moderator) fail("FORBIDDEN", "You can only delete your own messages.");
     await ctx.db.patch(messages, messageId, { deletedAt: Date.now() });
@@ -167,7 +167,7 @@ export const react = app.mutation({
   handler: async (ctx, { messageId, emoji }) => {
     const m = await ctx.db.get(messages, messageId);
     if (!m || m.deletedAt) fail("NOT_FOUND", "Message not found.");
-    const { participant } = await requireChannel(ctx, m.channelId, { write: true });
+    const { participant } = await loadChannel(ctx, m.channelId);
     const [existing] = await ctx.db.find(reactions, { messageId, participantId: participant.id, emoji });
     if (existing) {
       await ctx.db.delete(reactions, existing.id);
@@ -183,7 +183,7 @@ export const search = app.query({
   access: "messages.read",
   args: { workspaceId: s.string(), q: s.string({ minLength: 1, maxLength: 200 }) },
   handler: async (ctx, { workspaceId, q }) => {
-    const { participant, membership } = await requireWorkspace(ctx, workspaceId);
+    const { participant, membership } = await loadWorkspace(ctx, workspaceId);
     const readable = new Map((await readableChannels(ctx, workspaceId, participant.id, membership.role)).map((c) => [c.id, c]));
     const needle = q.trim().toLowerCase();
     const hits = (await ctx.db.find(messages, { workspaceId }))

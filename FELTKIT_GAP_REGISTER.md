@@ -2,9 +2,9 @@
 
 > Generated from `feltkit-gaps.json` by `node tools/gaps-md.mjs`. Edit the JSON, not this file.
 
-Project: Multiplayer (rkendel1/workspace, multiplayer/). Platform: @feltdb/feltkit 0.3.15, create-feltkit 0.3.15, @feltdb/core 0.21.0, @appport/sdk 1.4.0, @appport/services 0.15.0, @appport/appboundry 1.8.0.
+Project: Multiplayer (rkendel1/workspace, multiplayer/). Platform: @feltdb/feltkit 0.3.16, create-feltkit 0.3.16, @feltdb/core 0.21.0, @appport/sdk 1.4.0, @appport/services 0.15.0, @appport/appboundry 1.9.0, @appport/sdk (released, not yet used by FeltKit 0.3.16) 1.5.0, @appport/server (released, not yet used by FeltKit 0.3.16) 1.2.0.
 
-Platform source revisions read: rkendel1/feltkit@50bc617, rkendel1/appboundry@94502ef, rkendel1/appport@e9815a5, rkendel1/authboundry@b8ed659, rkendel1/appport-services@ac20b5a, rkendel1/feltkit (work)@f20ed78, 7f8e71d, a65a38e on claude/product-primitives (local, unpushed, unreleased), rkendel1/appport (work)@f1f8c21 on claude/scoped-event-authorization (local, unpushed, unreleased), rkendel1/appboundry (work)@c925d91 on claude/crypto-host-interface (local, unpushed, unreleased).
+Platform source revisions read: rkendel1/feltkit@b349543 (main; includes f20ed78, 7f8e71d, a65a38e), rkendel1/appport@c637e8e (main; includes f1f8c21), rkendel1/appboundry@7dc1510 (main; includes c925d91), rkendel1/authboundry@b8ed659, rkendel1/appport-services@ac20b5a.
 
 **Gap-to-code accounting:** ≈550 code lines (≈22% of custom code); the attributions overlap slightly (FK-GAP-001 call sites sit inside modules also attributed to FK-GAP-003/007/008), deduplicated ≈520. ≈370 code lines (≈15%) if FK-GAP-001, -003, -004, -006, -007, -008 were closed; the rest relocates or is application semantics. Method: cloc 2.00 on each file (tools/measure.mjs); function-level counts by non-blank, non-comment lines of the named exports.
 
@@ -14,30 +14,30 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 
 | ID | Title | Classification | Layer | Severity | Priority | Owner | Status |
 |---|---|---|---|---|---|---|---|
-| [FK-GAP-001](#fk-gap-001) | No application-supplied, input-aware authorization hook in FeltKit | missing-extension-point | hook | high | P1 | FeltKit (exposes AppPort's existing Authorizer composition); AppPort unchanged | implemented in FeltKit (local commit f20ed78, unreleased); consumer acceptance passed |
+| [FK-GAP-001](#fk-gap-001) | No application-supplied, input-aware authorization hook in FeltKit | missing-extension-point | hook | high | P1 | FeltKit (exposes AppPort's existing Authorizer composition); AppPort unchanged | closed — released in @feltdb/feltkit 0.3.16; adopted by Multiplayer (workaround removed) |
 | [FK-GAP-002](#fk-gap-002) | AuthBoundry has no resource-level evaluation, and FeltKit has no AuthBoundry adapter | missing-capability | integration | medium | P2 | AuthBoundry (evaluation); FeltKit (adapter) | open — FeltKit integration point now exists (feltkit({ authorize })); AuthBoundry resource evaluation still missing |
 | [FK-GAP-003](#fk-gap-003) | No tenancy / membership primitive | missing-capability | primitive | medium | P2 | AuthBoundry (membership as delegation), with FeltKit integration through FK-GAP-001/002 — not a FeltKit membership store | open — reassigned to AuthBoundry; FeltKit side now available (authorize hook) |
-| [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events) | partially addressed — AppPort prerequisite implemented locally (f1f8c21, unreleased); FeltKit integration blocked on an AppPort release (publishing needs approval) |
+| [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events) | partially addressed — AppPort half released (scoped events, subscription authorization); FeltKit integration not built (FeltKit 0.3.16 still on @appport/sdk 1.4.0). Multiplayer keeps its bounded presence records until then. |
 | [FK-GAP-005](#fk-gap-005) | Live-query invalidation is per collection, not per query predicate | missing-capability | primitive | medium | P2 | FeltKit (change feed); FeltDB (F7 change listener naming keys) | open |
 | [FK-GAP-006](#fk-gap-006) | No text search / contains operator in ctx.db.query | missing-capability | primitive | low | P3 | FeltDB (index), FeltKit (exposure) | open (workaround in app) |
 | [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | open (workaround in app) |
 | [FK-GAP-008](#fk-gap-008) | No hosted, event-triggered execution for application agents | missing-capability | primitive | high | P1 | FeltKit + AppBoundry (execution); FeltDB agent state | open (workaround in app) |
 | [FK-GAP-009](#fk-gap-009) | AppBoundry deployment (Hetzner) is not available to an application | unsupported-requirement | deployment | high | P1 | AppBoundry | blocking deployment acceptance |
-| [FK-GAP-010](#fk-gap-010) | No secure token / random primitive for application bearer secrets | missing-capability | primitive | medium | P2 | FeltKit (ctx.crypto) + AppBoundry (host interface crypto@1) — each in its own repository | implemented in FeltKit and AppBoundry (local commits, unreleased); consumer acceptance passed |
+| [FK-GAP-010](#fk-gap-010) | No secure token / random primitive for application bearer secrets | missing-capability | primitive | medium | P2 | FeltKit (ctx.crypto) + AppBoundry (host interface crypto@1) — each in its own repository | closed — released in @feltdb/feltkit 0.3.16 and @appport/appboundry 1.9.0 (crypto@1); adopted by Multiplayer (workaround removed) |
 | [FK-GAP-011](#fk-gap-011) | Client reconnect waits out exponential backoff (up to 10 s) after the network returns | developer-experience | client | low | P3 | FeltKit client | open |
 | [FK-GAP-012](#fk-gap-012) | Capabilities require hand-written output schemas even when the handler's return type is known | developer-experience | dx | low | P3 | FeltKit | accepted (by design) |
 | [FK-GAP-013](#fk-gap-013) | FeltKit built-in accounts (sign-up / sign-in) are not available when the artifact runs on AppBoundry | missing-integration | integration | high | P1 | AppBoundry (identity host interface); AuthBoundry as the eventual identity owner | open (blocks self-serve onboarding on the approved target) |
 | [FK-GAP-014](#fk-gap-014) | MCP endpoint (and Studio) are not part of the artifact; agents on AppBoundry use HTTP only | missing-integration | integration | medium | P2 | AppBoundry (web interface); AppPort (MCP transport) | open |
 | [FK-GAP-015](#fk-gap-015) | Two AppBoundry artifact formats and runtime paths: repository bundles (appport add) and FeltKit artifacts are not interchangeable | missing-integration | architecture | medium | P2 | AppBoundry (artifact contract); AppPort (packager); FeltKit (producer) | open |
 | [FK-GAP-016](#fk-gap-016) | `npx appport add` is interactive-only and needs a Rust wasm32 toolchain | developer-experience | dx | low | P3 | AppPort CLI | open |
-| [FK-GAP-017](#fk-gap-017) | AppPort delivered events a session may not observe (wildcard subscriptions; subscriptions bypassed the application Authorizer) | missing-capability | security | high | P1 | AppPort | fixed in AppPort locally (f1f8c21, unreleased, unpushed); needs review and release |
+| [FK-GAP-017](#fk-gap-017) | AppPort delivered events a session may not observe (wildcard subscriptions; subscriptions bypassed the application Authorizer) | missing-capability | security | high | P1 | AppPort | closed — released in AppPort (@appport/protocol 1.4.0, core 1.6.0, server 1.2.0, sdk 1.5.0, authorization 1.0.8) |
 | [FK-GAP-018](#fk-gap-018) | AppPort decisions cannot conceal existence (no NOT_FOUND denial) | missing-extension-point | contract | low | P3 | AppPort | open (FeltKit workaround in the primitive) |
 
 ## FK-GAP-001
 
 ### No application-supplied, input-aware authorization hook in FeltKit
 
-Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 · implemented in FeltKit (local commit f20ed78, unreleased); consumer acceptance passed
+Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 · closed — released in @feltdb/feltkit 0.3.16; adopted by Multiplayer (workaround removed)
 
 **Components:**
 
@@ -57,9 +57,9 @@ Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 
 
 **What the platform provides:** Role/permission checks at every boundary; ctx.auth.require(permission) inside handlers.
 
-**Implemented manually:** feltkit/_authz.ts: loads the target record from the id the client sent, resolves the caller's participant and membership, and refuses NOT_FOUND/FORBIDDEN. Called at the top of every handler that takes an id.
+**Implemented manually:** Nothing beyond the application's own policy (feltkit/_authz.ts `authorize`), which belongs to the application.
 
-**Workaround:** Centralized helper module called explicitly by each handler; transport-independent (runs inside the function, so HTTP, AppPort and MCP calls all pass through it).
+**Workaround:** Removed (2026-11-05).
 
 **Custom LOC attributable:** 51 (feltkit/_authz.ts) + 43 call sites in handlers = ~94 code lines. Of these ~20 lines of plumbing (load record → resolve workspace → find membership) and the 43 call sites would disappear; ~30 lines of membership policy are application-specific and would relocate into the registered authorizer. — MEASURED after the primitive (consumer run): net +39 lines; 37 call sites remain as loaders. See resolution.measuredEffect.
 
@@ -104,7 +104,7 @@ Discovered 2026-11-05 · missing-extension-point · hook · severity high · P1 
 - packages/sdk/test/authorize.test.ts: 10 tests — decision from args + stored records; order (roles → validation → hook); AppPort dispatch; a real MCP client; denial evidence incl. NOT_FOUND concealment; commit fence (membership revoked mid-call → CONFLICT, nothing written); live read set; a real live-query client denied on revocation; fail closed (throw / garbage / write attempt); the compiled AppBoundry artifact
 - Full FeltKit suite: 389/389 (baseline 379/379)
 
-**Consumer acceptance:** acceptance/feltkit-authorize/run.sh: local FeltKit packed into a scratch copy of Multiplayer; Multiplayer's 18 tests pass unchanged (no regression), and pass again with the whole membership policy in one feltkit({ authorize }) hook while _authz.ts's requireWorkspace/requireChannel enforce nothing.
+**Consumer acceptance:** acceptance/feltkit-authorize/run.sh: local FeltKit packed into a scratch copy of Multiplayer; Multiplayer's 18 tests pass unchanged (no regression), and pass again with the whole membership policy in one feltkit({ authorize }) hook while _authz.ts's requireWorkspace/requireChannel enforce nothing. (Pre-release scaffolding: the script patched a scratch copy before the package was published. Removed after adoption; it remains in history at commit 08a8136.)
 
 **Measured effect:** Code size did not shrink: _authz.ts 51 → 45 lines, hook +45, net +39; 37 call sites remain as context loaders (participant, role, channel). The gain is guarantees: one policy on every function and interface, default-deny for functions the policy does not recognise, decision fenced at commit, live revocation, recorded decisions. The earlier estimate (≈63 lines disappear) was wrong and is corrected here.
 
@@ -201,7 +201,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 ### No ephemeral / broadcast real-time primitive (presence, typing)
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · partially addressed — AppPort prerequisite implemented locally (f1f8c21, unreleased); FeltKit integration blocked on an AppPort release (publishing needs approval)
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · partially addressed — AppPort half released (scoped events, subscription authorization); FeltKit integration not built (FeltKit 0.3.16 still on @appport/sdk 1.4.0). Multiplayer keeps its bounded presence records until then.
 
 **Components:**
 
@@ -469,7 +469,7 @@ Discovered 2026-11-05 · unsupported-requirement · deployment · severity high 
 
 ### No secure token / random primitive for application bearer secrets
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · implemented in FeltKit and AppBoundry (local commits, unreleased); consumer acceptance passed
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · closed — released in @feltdb/feltkit 0.3.16 and @appport/appboundry 1.9.0 (crypto@1); adopted by Multiplayer (workaround removed)
 
 **Components:**
 
@@ -487,9 +487,9 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **What the platform provides:** Record ids (48 random bits). Sessions/API keys exist but are for principals, not app-level links.
 
-**Implemented manually:** Invitation = record id used as the code; single use, 7-day expiry, revocable, audited.
+**Implemented manually:** Nothing.
 
-**Workaround:** Accepted 48-bit codes, documented as a known limitation; mitigated by expiry, single use and revocation (no rate limiting).
+**Workaround:** Removed (2026-11-05).
 
 **Custom LOC attributable:** 0 after the primitive (consumer: one call)
 
@@ -531,7 +531,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 - Cross-runtime: FeltKit-built artifacts run on AppBoundry's runtime host (local build): crypto@1 tokens drawn by AppBoundry; the authorize hook (FK-GAP-001) enforced inside the artifact. The published @appport/appboundry 1.8.0 refuses the crypto artifact at load (ARTIFACT_INTERFACE_UNSUPPORTED) and loads the authorize artifact.
 - FeltKit full suite: 392/392 (391 + the docs-citation test re-run after a docs fix)
 
-**Consumer acceptance:** acceptance/feltkit-crypto-token/run.sh: Multiplayer's invitation codes become ctx.crypto.token() values (stored, unique, looked up by code) in a scratch copy on the local FeltKit — runtime: 18/18; compiled artifact: 18/18 (manifest declares crypto@1).
+**Consumer acceptance:** acceptance/feltkit-crypto-token/run.sh: Multiplayer's invitation codes become ctx.crypto.token() values (stored, unique, looked up by code) in a scratch copy on the local FeltKit — runtime: 18/18; compiled artifact: 18/18 (manifest declares crypto@1). (Pre-release scaffolding: the script patched a scratch copy before the package was published. Removed after adoption; it remains in history at commit 08a8136.)
 
 **Measured effect:** Invitation codes go from 48 random bits + a timestamp (record id) to 256 random bits. Code change in the consumer: one call to create the code and lookups by `code` instead of by id (+1 collection field, unique).
 
@@ -785,7 +785,7 @@ Discovered 2026-11-05 · developer-experience · dx · severity low · P3 · ope
 
 ### AppPort delivered events a session may not observe (wildcard subscriptions; subscriptions bypassed the application Authorizer)
 
-Discovered 2026-11-05 · missing-capability · security · severity high · P1 · fixed in AppPort locally (f1f8c21, unreleased, unpushed); needs review and release
+Discovered 2026-11-05 · missing-capability · security · severity high · P1 · closed — released in AppPort (@appport/protocol 1.4.0, core 1.6.0, server 1.2.0, sdk 1.5.0, authorization 1.0.8)
 
 **Components:**
 
@@ -819,6 +819,8 @@ Discovered 2026-11-05 · missing-capability · security · severity high · P1 �
 **Architectural owner:** AppPort
 
 **Dependencies:** none
+
+#### Platform work (undefined)
 
 ## FK-GAP-018
 

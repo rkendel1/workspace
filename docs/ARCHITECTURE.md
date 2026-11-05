@@ -32,7 +32,7 @@ flowchart LR
 |---|---|---|
 | Durable state | FeltDB (through `ctx.db`) | 13 collections; each mutation is one atomic transaction; reads are fenced at commit |
 | Capability and permission boundary | AppPort, via FeltKit's authority | Roles `member`, `agent`, `admin` map to permissions; checked on HTTP, AppPort, MCP and Services |
-| Resource authorization | **Application** (`feltkit/_authz.ts`) | Membership of the workspace and conversation. FeltKit has no hook for this (FK-GAP-001) |
+| Resource authorization | FeltKit `feltkit({ authorize })` runs the **application's policy** (`feltkit/_authz.ts`) | Membership of the workspace and conversation, decided once per call, on every interface and in the artifact, with reads fenced at commit and tracked live |
 | Files, notifications | AppPort Services on the same instance | Bytes and checksums in Files; mention/agent/invitation notifications through `ctx.afterCommit` |
 | Real-time delivery | FeltKit change feed + client | Live queries re-run when a collection they read changes; no application transport |
 | Presence, typing | Application (bounded records) | One overwritten `presence` record per participant per workspace (FK-GAP-004) |
@@ -47,7 +47,7 @@ flowchart LR
 | `participants` | identity | unique `principalId`, unique `handle`; `kind` human or agent; `agentType` personal, workspace or application; `persona` for sample people (no principal) |
 | `workspaces` | tenant | — |
 | `memberships` | **authoritative** | ref workspace, ref participant, unique (workspace, participant), role owner/admin/member/guest/agent |
-| `invitations` | authoritative | ref workspace; single use, 7-day expiry, revocable |
+| `invitations` | authoritative | ref workspace; `code` from `ctx.crypto.token()` (256 bits, unique) is the only thing a link carries; single use, 7-day expiry, revocable |
 | `channels` | conversation | public, private, dm or group; unique (workspace, dmKey) for DMs/groups |
 | `channelMembers` | **authoritative** | unique (channel, participant); `lastReadSeq` drives unread counts |
 | `messages` | durable record | `seq` from `ctx.db.sequence("msg:<channel>")` (commit order, no gaps); `rootId` for threads; soft delete |
@@ -67,7 +67,9 @@ transaction as the reply.
 1. **Application role (AppPort).** People hold `member`: `workspaces.*`, `channels.*`, `messages.*`, … .
    The agent holds `agent`: `agents.work`, `messages.read|write`, `plans.read|write`, `presence.write`,
    `notifications.send`. A principal without the permission is refused before the handler runs.
-2. **Membership (application).** Every handler resolves the ids it was given to records, then checks:
+2. **Membership (application policy, enforced by FeltKit).** `authorize` in `feltkit/_authz.ts` runs after the
+   role check and argument validation, before the handler, for every function (default deny). It resolves
+   the ids in the arguments to records, then checks:
    - Workspace: the caller has a membership. Otherwise `NOT_FOUND`, so there is no existence oracle.
    - Role: owner > admin > member > guest/agent, for admin actions and invitations.
    - Conversation: private channels, DMs and groups are readable by their members only. Public channels
