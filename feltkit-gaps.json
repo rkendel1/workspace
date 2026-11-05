@@ -242,7 +242,7 @@
       "dependencies": [],
       "severity": "medium",
       "priority": "P2",
-      "status": "open",
+      "status": "implemented — rkendel1/feltkit branch claude/gap-005-006 (82dc40e, pushed; PR pending): queries report keyed equality predicates; change events carry per-record HMAC keys (per-process key, never sent); /api/events withholds other tenants' records; watchQuery re-runs on key match. Limits: remote FeltDB stays per collection; writes outside FeltKit's commit path stay per collection. Tests: live-predicates.test.ts (6).",
       "codeKind": "—",
       "reuseFinding": "FeltDB already offers predicate-level read bases (db.readBasis(predicates)), which FeltKit uses to fence mutation reads (runtime/data.ts #fence). Predicate-level invalidation should reuse it (a FeltDB 'changed since basis' check, or change events carrying the predicate keys) rather than a new FeltKit tracker. Needs a FeltDB-side decision and rkendel1/flow_db; not started."
     },
@@ -272,7 +272,7 @@
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "open (workaround in app)",
+      "status": "implemented in FeltKit (scan) — branch claude/gap-005-006 (82dc40e): app.collection(..., { search }) + ctx.db.search({ text, where, limit ≤ 100 }), tenant-scoped, live, fenced, works in AppBoundry guests on existing reads; cost linear in the `where` subset (50k cap). A FeltDB text index remains upstream (UPSTREAM-GAPS F23). Tests: search.test.ts (8).",
       "codeKind": "workaround"
     },
     {
@@ -351,7 +351,7 @@
       "dependencies": [],
       "severity": "high",
       "priority": "P1",
-      "status": "open (workaround in app)",
+      "status": "implemented — rkendel1/feltkit branch claude/gap-008 (00a2ec6, pushed; PR pending): app.agent(name, { principal, roles, on?, handler }) triggered by ctx.afterCommit.agent or app.event, recorded in the mutation's outbox, run at least once as the agent principal (its own roles, never the caller's) with leases and backoff, writes committed at most once (transaction id from the outbox id), restart recovery, tenant only where the agent is a member. AppBoundry: refused at build (needs a host interface). Tests: agents.test.ts (10).",
       "codeKind": "platform integration glue (adapter + queue)"
     },
     {
@@ -541,7 +541,7 @@
       ],
       "severity": "high",
       "priority": "P1",
-      "status": "open (blocks self-serve onboarding on the approved target)",
+      "status": "reduced, blocked on a design decision — FeltKit claude/appboundry-gaps (ebf3af9): build warns and the manifest declares identity.accounts/tenancy; AppBoundry (d11fd9b) refuses such artifacts at load unless the operator accepts operator sessions (--accounts operator-sessions). Design: appboundry docs/identity-host-interface.md (accounts@1/tenancy@1 host interfaces running FeltKit's own handlers in the guest; 7 open questions). Owners: AppBoundry (host), FeltKit (guest handlers), Mailerport (mail). Tests: identity-declarations.test.ts (6).",
       "codeKind": "deployment glue"
     },
     {
@@ -571,7 +571,7 @@
       "dependencies": [],
       "severity": "medium",
       "priority": "P2",
-      "status": "open",
+      "status": "closed in code — rkendel1/appboundry branch claude/gaps-013-014-015 (dc64f6a, pushed; PR pending): /mcp served from the manifest via @appport/mcp createMcpHandler, same authentication and authorization as /appport. Studio out of scope. Tests: mcp.test.ts (4).",
       "codeKind": "—"
     },
     {
@@ -608,7 +608,7 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "open"
+      "status": "reduced — appboundry claude/gaps-013-014-015 (8636580): one recognizer/verifier for both formats; run, artifact verify/inspect, app install/inspect accept both; host loader refuses bundles clearly. Remaining: managed deploy accepts FeltKit artifacts only (AppBoundry); one producer format needs AppPort+FeltKit+AppBoundry agreement. Investigation: appboundry docs/artifact-formats.md. Tests: artifact-formats.test.ts (9)."
     },
     {
       "id": "FK-GAP-016",

@@ -18,17 +18,17 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 | [FK-GAP-002](#fk-gap-002) | AuthBoundry has no resource-level evaluation, and FeltKit has no AuthBoundry adapter | missing-capability | integration | medium | P2 | AuthBoundry (evaluation); FeltKit (adapter) | superseded (2026-11-05 decision) — the wanted outcome (tenant membership and per-resource decisions on the server) is delivered natively by FeltKit (auth.tenant, tenant-scoped collections, the authorize hook; PR #65). The proposed AuthBoundry adapter would make FeltKit depend at runtime on a hosted AuthBoundry service, which the Phase 2 constraints rule out ("FeltKit must remain self-contained"). Delegation for agents acting for a person moves to the agent workstream (AuthBoundry contract implemented in FeltKit, FELTKIT_AUTH_AGENT_STACK_AUDIT.md §5.3). AuthBoundry evaluating `resource` in enforce() remains AuthBoundry's own item. |
 | [FK-GAP-003](#fk-gap-003) | No tenancy / membership primitive | missing-capability | primitive | medium | P2 | AuthBoundry (membership as delegation), with FeltKit integration through FK-GAP-001/002 — not a FeltKit membership store | closed in FeltKit — tenancy primitive (auth.tenant: tenants, memberships, invitations, switching, tenant-scoped collections, typed claims), merged in rkendel1/feltkit PR #65; merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration. |
 | [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events) | closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). |
-| [FK-GAP-005](#fk-gap-005) | Live-query invalidation is per collection, not per query predicate | missing-capability | primitive | medium | P2 | FeltKit (change feed); FeltDB (F7 change listener naming keys) | open |
-| [FK-GAP-006](#fk-gap-006) | No text search / contains operator in ctx.db.query | missing-capability | primitive | low | P3 | FeltDB (index), FeltKit (exposure) | open (workaround in app) |
+| [FK-GAP-005](#fk-gap-005) | Live-query invalidation is per collection, not per query predicate | missing-capability | primitive | medium | P2 | FeltKit (change feed); FeltDB (F7 change listener naming keys) | implemented — rkendel1/feltkit branch claude/gap-005-006 (82dc40e, pushed; PR pending): queries report keyed equality predicates; change events carry per-record HMAC keys (per-process key, never sent); /api/events withholds other tenants' records; watchQuery re-runs on key match. Limits: remote FeltDB stays per collection; writes outside FeltKit's commit path stay per collection. Tests: live-predicates.test.ts (6). |
+| [FK-GAP-006](#fk-gap-006) | No text search / contains operator in ctx.db.query | missing-capability | primitive | low | P3 | FeltDB (index), FeltKit (exposure) | implemented in FeltKit (scan) — branch claude/gap-005-006 (82dc40e): app.collection(..., { search }) + ctx.db.search({ text, where, limit ≤ 100 }), tenant-scoped, live, fenced, works in AppBoundry guests on existing reads; cost linear in the `where` subset (50k cap). A FeltDB text index remains upstream (UPSTREAM-GAPS F23). Tests: search.test.ts (8). |
 | [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration. |
-| [FK-GAP-008](#fk-gap-008) | No hosted, event-triggered execution for application agents | missing-capability | primitive | high | P1 | FeltKit + AppBoundry (execution); FeltDB agent state | open (workaround in app) |
+| [FK-GAP-008](#fk-gap-008) | No hosted, event-triggered execution for application agents | missing-capability | primitive | high | P1 | FeltKit + AppBoundry (execution); FeltDB agent state | implemented — rkendel1/feltkit branch claude/gap-008 (00a2ec6, pushed; PR pending): app.agent(name, { principal, roles, on?, handler }) triggered by ctx.afterCommit.agent or app.event, recorded in the mutation's outbox, run at least once as the agent principal (its own roles, never the caller's) with leases and backoff, writes committed at most once (transaction id from the outbox id), restart recovery, tenant only where the agent is a member. AppBoundry: refused at build (needs a host interface). Tests: agents.test.ts (10). |
 | [FK-GAP-009](#fk-gap-009) | AppBoundry deployment (Hetzner) is not available to an application | unsupported-requirement | deployment | high | P1 | AppBoundry | blocked (not actionable under current constraints) — needs Hetzner deployment, which is excluded ("No Hetzner contact or deployment"). Owner: AppBoundry / operator. |
 | [FK-GAP-010](#fk-gap-010) | No secure token / random primitive for application bearer secrets | missing-capability | primitive | medium | P2 | FeltKit (ctx.crypto) + AppBoundry (host interface crypto@1) — each in its own repository | closed — released in @feltdb/feltkit 0.3.16 and @appport/appboundry 1.9.0 (crypto@1); adopted by Multiplayer (workaround removed) |
 | [FK-GAP-011](#fk-gap-011) | Client reconnect waits out exponential backoff (up to 10 s) after the network returns | developer-experience | client | low | P3 | FeltKit client | closed in code — merged (FeltKit PR #62); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). |
 | [FK-GAP-012](#fk-gap-012) | Capabilities require hand-written output schemas even when the handler's return type is known | developer-experience | dx | low | P3 | FeltKit | accepted (by design) |
-| [FK-GAP-013](#fk-gap-013) | FeltKit built-in accounts (sign-up / sign-in) are not available when the artifact runs on AppBoundry | missing-integration | integration | high | P1 | AppBoundry (identity host interface); AuthBoundry as the eventual identity owner | open (blocks self-serve onboarding on the approved target) |
-| [FK-GAP-014](#fk-gap-014) | MCP endpoint (and Studio) are not part of the artifact; agents on AppBoundry use HTTP only | missing-integration | integration | medium | P2 | AppBoundry (web interface); AppPort (MCP transport) | open |
-| [FK-GAP-015](#fk-gap-015) | Two AppBoundry artifact formats and runtime paths: repository bundles (appport add) and FeltKit artifacts are not interchangeable | missing-integration | architecture | medium | P2 | AppBoundry (artifact contract); AppPort (packager); FeltKit (producer) | open |
+| [FK-GAP-013](#fk-gap-013) | FeltKit built-in accounts (sign-up / sign-in) are not available when the artifact runs on AppBoundry | missing-integration | integration | high | P1 | AppBoundry (identity host interface); AuthBoundry as the eventual identity owner | reduced, blocked on a design decision — FeltKit claude/appboundry-gaps (ebf3af9): build warns and the manifest declares identity.accounts/tenancy; AppBoundry (d11fd9b) refuses such artifacts at load unless the operator accepts operator sessions (--accounts operator-sessions). Design: appboundry docs/identity-host-interface.md (accounts@1/tenancy@1 host interfaces running FeltKit's own handlers in the guest; 7 open questions). Owners: AppBoundry (host), FeltKit (guest handlers), Mailerport (mail). Tests: identity-declarations.test.ts (6). |
+| [FK-GAP-014](#fk-gap-014) | MCP endpoint (and Studio) are not part of the artifact; agents on AppBoundry use HTTP only | missing-integration | integration | medium | P2 | AppBoundry (web interface); AppPort (MCP transport) | closed in code — rkendel1/appboundry branch claude/gaps-013-014-015 (dc64f6a, pushed; PR pending): /mcp served from the manifest via @appport/mcp createMcpHandler, same authentication and authorization as /appport. Studio out of scope. Tests: mcp.test.ts (4). |
+| [FK-GAP-015](#fk-gap-015) | Two AppBoundry artifact formats and runtime paths: repository bundles (appport add) and FeltKit artifacts are not interchangeable | missing-integration | architecture | medium | P2 | AppBoundry (artifact contract); AppPort (packager); FeltKit (producer) | reduced — appboundry claude/gaps-013-014-015 (8636580): one recognizer/verifier for both formats; run, artifact verify/inspect, app install/inspect accept both; host loader refuses bundles clearly. Remaining: managed deploy accepts FeltKit artifacts only (AppBoundry); one producer format needs AppPort+FeltKit+AppBoundry agreement. Investigation: appboundry docs/artifact-formats.md. Tests: artifact-formats.test.ts (9). |
 | [FK-GAP-016](#fk-gap-016) | `npx appport add` is interactive-only and needs a Rust wasm32 toolchain | developer-experience | dx | low | P3 | AppPort CLI | closed — released (appport CLI 1.4.0: add --help, refusal without a terminal). |
 | [FK-GAP-017](#fk-gap-017) | AppPort delivered events a session may not observe (wildcard subscriptions; subscriptions bypassed the application Authorizer) | missing-capability | security | high | P1 | AppPort | closed — released in AppPort (@appport/protocol 1.4.0, core 1.6.0, server 1.2.0, sdk 1.5.0, authorization 1.0.8) |
 | [FK-GAP-018](#fk-gap-018) | AppPort decisions cannot conceal existence (no NOT_FOUND denial) | missing-extension-point | contract | low | P3 | AppPort | closed — AppPort NOT_FOUND denials released (@appport/authorization 1.1.0, server 1.3.0); FeltKit side merged (PR #62); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). |
@@ -266,7 +266,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 ### Live-query invalidation is per collection, not per query predicate
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · open
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · implemented — rkendel1/feltkit branch claude/gap-005-006 (82dc40e, pushed; PR pending): queries report keyed equality predicates; change events carry per-record HMAC keys (per-process key, never sent); /api/events withholds other tenants' records; watchQuery re-runs on key match. Limits: remote FeltDB stays per collection; writes outside FeltKit's commit path stay per collection. Tests: live-predicates.test.ts (6).
 
 **Components:**
 
@@ -306,7 +306,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 ### No text search / contains operator in ctx.db.query
 
-Discovered 2026-11-05 · missing-capability · primitive · severity low · P3 · open (workaround in app)
+Discovered 2026-11-05 · missing-capability · primitive · severity low · P3 · implemented in FeltKit (scan) — branch claude/gap-005-006 (82dc40e): app.collection(..., { search }) + ctx.db.search({ text, where, limit ≤ 100 }), tenant-scoped, live, fenced, works in AppBoundry guests on existing reads; cost linear in the `where` subset (50k cap). A FeltDB text index remains upstream (UPSTREAM-GAPS F23). Tests: search.test.ts (8).
 
 **Components:**
 
@@ -401,7 +401,7 @@ Discovered 2026-11-05 · missing-extension-point · integration · severity medi
 
 ### No hosted, event-triggered execution for application agents
 
-Discovered 2026-11-05 · missing-capability · primitive · severity high · P1 · open (workaround in app)
+Discovered 2026-11-05 · missing-capability · primitive · severity high · P1 · implemented — rkendel1/feltkit branch claude/gap-008 (00a2ec6, pushed; PR pending): app.agent(name, { principal, roles, on?, handler }) triggered by ctx.afterCommit.agent or app.event, recorded in the mutation's outbox, run at least once as the agent principal (its own roles, never the caller's) with leases and backoff, writes committed at most once (transaction id from the outbox id), restart recovery, tenant only where the agent is a member. AppBoundry: refused at build (needs a host interface). Tests: agents.test.ts (10).
 
 **Components:**
 
@@ -647,7 +647,7 @@ Discovered 2026-11-05 · developer-experience · dx · severity low · P3 · acc
 
 ### FeltKit built-in accounts (sign-up / sign-in) are not available when the artifact runs on AppBoundry
 
-Discovered 2026-11-05 · missing-integration · integration · severity high · P1 · open (blocks self-serve onboarding on the approved target)
+Discovered 2026-11-05 · missing-integration · integration · severity high · P1 · reduced, blocked on a design decision — FeltKit claude/appboundry-gaps (ebf3af9): build warns and the manifest declares identity.accounts/tenancy; AppBoundry (d11fd9b) refuses such artifacts at load unless the operator accepts operator sessions (--accounts operator-sessions). Design: appboundry docs/identity-host-interface.md (accounts@1/tenancy@1 host interfaces running FeltKit's own handlers in the guest; 7 open questions). Owners: AppBoundry (host), FeltKit (guest handlers), Mailerport (mail). Tests: identity-declarations.test.ts (6).
 
 **Components:**
 
@@ -688,7 +688,7 @@ Discovered 2026-11-05 · missing-integration · integration · severity high · 
 
 ### MCP endpoint (and Studio) are not part of the artifact; agents on AppBoundry use HTTP only
 
-Discovered 2026-11-05 · missing-integration · integration · severity medium · P2 · open
+Discovered 2026-11-05 · missing-integration · integration · severity medium · P2 · closed in code — rkendel1/appboundry branch claude/gaps-013-014-015 (dc64f6a, pushed; PR pending): /mcp served from the manifest via @appport/mcp createMcpHandler, same authentication and authorization as /appport. Studio out of scope. Tests: mcp.test.ts (4).
 
 **Components:**
 
@@ -728,7 +728,7 @@ Discovered 2026-11-05 · missing-integration · integration · severity medium �
 
 ### Two AppBoundry artifact formats and runtime paths: repository bundles (appport add) and FeltKit artifacts are not interchangeable
 
-Discovered 2026-11-05 · missing-integration · architecture · severity medium · P2 · open
+Discovered 2026-11-05 · missing-integration · architecture · severity medium · P2 · reduced — appboundry claude/gaps-013-014-015 (8636580): one recognizer/verifier for both formats; run, artifact verify/inspect, app install/inspect accept both; host loader refuses bundles clearly. Remaining: managed deploy accepts FeltKit artifacts only (AppBoundry); one producer format needs AppPort+FeltKit+AppBoundry agreement. Investigation: appboundry docs/artifact-formats.md. Tests: artifact-formats.test.ts (9).
 
 **Components:**
 
