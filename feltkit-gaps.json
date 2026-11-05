@@ -305,9 +305,23 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "open (workaround in app)",
+      "status": "implemented in FeltKit (branch claude/file-links, local, not pushed); Multiplayer adoption awaits release",
       "codeKind": "glue (transfer) + application semantics (binding)",
-      "ownershipEvidence": "AppPort Services Files passes only { owner } as resource attributes to the authorizer (src/files/service.ts), not the file's metadata, so no policy can decide by the resource a file belongs to. Owner of that change: AppPort Services; the transfer route (signed download/upload) is FeltKit's."
+      "ownershipEvidence": "AppPort Services Files passes only { owner } as resource attributes to the authorizer (src/files/service.ts), not the file's metadata, so no policy can decide by the resource a file belongs to. Owner of that change: AppPort Services; the transfer route (signed download/upload) is FeltKit's.",
+      "resolution": {
+        "date": "2026-11-05",
+        "implemented": [
+          "FeltKit: ctx.services.files.link(id, {expiresInSeconds, disposition}) -> GET /api/files/<token> (5 min default, max 1 h, reusable until expiry)",
+          "FeltKit: ctx.services.files.uploadLink({metadata, maxBytes, ...}) -> PUT /api/files/<token> (single use; created as the issuing principal with function-fixed metadata)",
+          "FeltKit: client.uploadFile(link, blob), client.fileUrl(link); only SHA-256 of tokens stored (_feltkit_file_links); nosniff + sandbox CSP + Content-Disposition on download",
+          "AppBoundry guest refuses link/uploadLink with UNAVAILABLE (no /api/files route on the host)"
+        ],
+        "tests": [
+          "feltkit test/file-links.test.ts (4): upload->bind->download, membership decides link issuance, unknown/expired/used/wrong-kind/over-limit refused, removed file link 404"
+        ],
+        "notChanged": "AppPort Services Files still passes only {owner} as resource attributes. Not needed for this outcome: the application authorizes the resource in the function that issues the link. Metadata-based Files authorization remains a possible AppPort Services improvement, not a blocker.",
+        "expectedMultiplayerEffect": "Removes _base64.ts (23 LOC) and the base64/Blob conversions in Workspace.tsx; attachments.upload/download become uploadLink/attach/link. The channel binding (attachments collection, membership checks) stays: it is application semantics."
+      }
     },
     {
       "id": "FK-GAP-008",

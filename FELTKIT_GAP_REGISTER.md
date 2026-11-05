@@ -20,7 +20,7 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 | [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events) | implemented across AppPort, FeltKit and AppBoundry (local branches); Multiplayer adoption blocked on the AppPort release |
 | [FK-GAP-005](#fk-gap-005) | Live-query invalidation is per collection, not per query predicate | missing-capability | primitive | medium | P2 | FeltKit (change feed); FeltDB (F7 change listener naming keys) | open |
 | [FK-GAP-006](#fk-gap-006) | No text search / contains operator in ctx.db.query | missing-capability | primitive | low | P3 | FeltDB (index), FeltKit (exposure) | open (workaround in app) |
-| [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | open (workaround in app) |
+| [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | implemented in FeltKit (branch claude/file-links, local, not pushed); Multiplayer adoption awaits release |
 | [FK-GAP-008](#fk-gap-008) | No hosted, event-triggered execution for application agents | missing-capability | primitive | high | P1 | FeltKit + AppBoundry (execution); FeltDB agent state | open (workaround in app) |
 | [FK-GAP-009](#fk-gap-009) | AppBoundry deployment (Hetzner) is not available to an application | unsupported-requirement | deployment | high | P1 | AppBoundry | blocking deployment acceptance |
 | [FK-GAP-010](#fk-gap-010) | No secure token / random primitive for application bearer secrets | missing-capability | primitive | medium | P2 | FeltKit (ctx.crypto) + AppBoundry (host interface crypto@1) — each in its own repository | closed — released in @feltdb/feltkit 0.3.16 and @appport/appboundry 1.9.0 (crypto@1); adopted by Multiplayer (workaround removed) |
@@ -345,7 +345,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity low · P3 �
 
 ### Files are application-shared; per-resource file access must be bound by the app
 
-Discovered 2026-11-05 · missing-extension-point · integration · severity medium · P2 · open (workaround in app)
+Discovered 2026-11-05 · missing-extension-point · integration · severity medium · P2 · implemented in FeltKit (branch claude/file-links, local, not pushed); Multiplayer adoption awaits release
 
 **Components:**
 
@@ -383,6 +383,19 @@ Discovered 2026-11-05 · missing-extension-point · integration · severity medi
 **Dependencies:** FK-GAP-001
 
 **Ownership evidence:** AppPort Services Files passes only { owner } as resource attributes to the authorizer (src/files/service.ts), not the file's metadata, so no policy can decide by the resource a file belongs to. Owner of that change: AppPort Services; the transfer route (signed download/upload) is FeltKit's.
+
+#### Platform work (2026-11-05)
+
+**Implemented:**
+
+- FeltKit: ctx.services.files.link(id, {expiresInSeconds, disposition}) -> GET /api/files/<token> (5 min default, max 1 h, reusable until expiry)
+- FeltKit: ctx.services.files.uploadLink({metadata, maxBytes, ...}) -> PUT /api/files/<token> (single use; created as the issuing principal with function-fixed metadata)
+- FeltKit: client.uploadFile(link, blob), client.fileUrl(link); only SHA-256 of tokens stored (_feltkit_file_links); nosniff + sandbox CSP + Content-Disposition on download
+- AppBoundry guest refuses link/uploadLink with UNAVAILABLE (no /api/files route on the host)
+
+**Tests:**
+
+- feltkit test/file-links.test.ts (4): upload->bind->download, membership decides link issuance, unknown/expired/used/wrong-kind/over-limit refused, removed file link 404
 
 ## FK-GAP-008
 

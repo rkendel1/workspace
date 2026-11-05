@@ -39,7 +39,7 @@ Each change lives with the component that owns the concept (FeltKit composes; Ap
 | [FK-GAP-013](FELTKIT_GAP_REGISTER.md#fk-gap-013) | accounts on AppBoundry (or via AuthBoundry) | AppBoundry | not started | open (blocks self-serve onboarding on the approved target) |
 | [FK-GAP-008](FELTKIT_GAP_REGISTER.md#fk-gap-008) | app agent triggers (run as the agent principal on an event, with leases) | FeltKit + AppBoundry | not started | open (workaround in app) |
 | [FK-GAP-002](FELTKIT_GAP_REGISTER.md#fk-gap-002), [FK-GAP-003](FELTKIT_GAP_REGISTER.md#fk-gap-003) | AuthBoundry resource evaluation + membership as delegation, consumed through feltkit({ authorize }) | AuthBoundry (+ FeltKit adapter) | FeltKit integration point exists | open — FeltKit integration point now exists (feltkit({ authorize })); AuthBoundry resource evaluation still missing; open — reassigned to AuthBoundry; FeltKit side now available (authorize hook) |
-| [FK-GAP-007](FELTKIT_GAP_REGISTER.md#fk-gap-007) | Files authorized by resource + signed URLs | AppPort Services | not started | open (workaround in app) |
+| [FK-GAP-007](FELTKIT_GAP_REGISTER.md#fk-gap-007) | Files authorized by resource + signed URLs | AppPort Services | not started | implemented in FeltKit (branch claude/file-links, local, not pushed); Multiplayer adoption awaits release |
 
 ## Architecture and scale
 
