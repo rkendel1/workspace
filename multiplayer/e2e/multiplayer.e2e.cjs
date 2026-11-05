@@ -10,7 +10,7 @@
  * By default it starts `feltkit dev` (fresh state) itself, and reads the
  * development inbox (e-mail is printed to the dev server's stdout: "✉ <to>: <subject>" and the text):
  *
- *   SHOTS=../screenshots/phase2-multiplayer node e2e/multiplayer.e2e.cjs
+ *   SHOTS=e2e/screenshots node e2e/multiplayer.e2e.cjs   (the default)
  *
  * Against a server you started yourself (then DEV_LOG must name the file the dev server writes to):
  *
@@ -24,7 +24,7 @@ const path = require("node:path");
 const ROOT = path.join(__dirname, "..");
 const PORT = Number(process.env.PORT ?? 3217);
 const BASE = process.env.BASE ?? `http://localhost:${PORT}`;
-const SHOTS = path.resolve(process.env.SHOTS ?? path.join(ROOT, "../screenshots/phase2-multiplayer"));
+const SHOTS = path.resolve(process.env.SHOTS ?? path.join(ROOT, "e2e/screenshots"));
 const EVIDENCE = process.env.EVIDENCE ?? path.join(SHOTS, "evidence.json");
 const GRACE_EMAIL = "grace@example.com";
 const results = [];

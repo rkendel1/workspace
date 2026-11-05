@@ -4,7 +4,7 @@ import { loadChannel } from "./_authz.js";
 
 /**
  * Files: AppPort Services Files stores the bytes (with checksum and audit) in this app's FeltDB
- * instance. Bytes travel over HTTP through FeltKit's file links (FK-GAP-007), never through the
+ * instance. Bytes travel over HTTP through FeltKit's file links, never through the
  * function API: a function that has authorized the conversation issues the link. The conversation a
  * file was shared in is recorded here, and every read is authorized by membership of it.
  *

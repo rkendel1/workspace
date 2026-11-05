@@ -14,7 +14,7 @@ export const AGENT = { id: "assistant", type: "agent" as const, displayName: "As
 
 /** MP_TARGET=artifact runs the tests against the compiled AppBoundry artifact (multiplayer.app) instead. */
 export const ARTIFACT = process.env.MP_TARGET === "artifact";
-const NO_TENANCY = "MP_TARGET=artifact is blocked: AppBoundry hosts have no accounts or tenancy (FK-GAP-013), and `feltkit build --target appboundry` refuses app.agent (the room agent), so no artifact of this app exists. Not faked: skipped.";
+const NO_TENANCY = "MP_TARGET=artifact is blocked: AppBoundry hosts have no accounts or tenancy, and `feltkit build --target appboundry` refuses app.agent (the room agent), so no artifact of this app exists. Not faked: skipped.";
 
 /** A test that needs workspaces (FeltKit tenancy). Skipped, with the reason, against the artifact. */
 export function wtest(name: string, fn: () => Promise<void>) {

@@ -2,6 +2,17 @@
   "name": "multiplayer",
   "private": true,
   "version": "0.1.0",
+  "description": "Multiplayer: an open-source, real-time workspace for people and AI agents, built on FeltKit.",
+  "license": "MIT",
+  "keywords": [
+    "feltkit",
+    "starter",
+    "chat",
+    "realtime",
+    "multiplayer",
+    "agents",
+    "workspace"
+  ],
   "type": "module",
   "scripts": {
     "dev": "feltkit dev",
@@ -10,10 +21,11 @@
     "test": "feltkit test",
     "inspect": "feltkit inspect",
     "deploy": "feltkit deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "node e2e/multiplayer.e2e.cjs"
   },
   "dependencies": {
-    "@feltdb/feltkit": "^0.3.16",
+    "@feltdb/feltkit": "0.3.18",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
@@ -25,5 +37,8 @@
     "tsx": "^4.20.6",
     "typescript": "5.9.3",
     "vite": "7.3.7"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

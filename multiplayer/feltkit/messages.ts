@@ -183,7 +183,7 @@ export const react = app.mutation({
 
 /**
  * Search the conversations the caller can read: every word, case- and accent-insensitive, newest
- * first (FeltKit's ctx.db.search, FK-GAP-006). One bounded search per readable conversation, so a
+ * first (FeltKit's ctx.db.search). One bounded search per readable conversation, so a
  * conversation the caller cannot read is never searched; tenant-scoped and tracked live by FeltKit.
  */
 export const search = app.query({

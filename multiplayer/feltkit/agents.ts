@@ -6,7 +6,7 @@ import { ensureRoomAgent, insertMessage, ROOM_AGENT } from "./_ops.js";
 import { record } from "./_util.js";
 
 /**
- * The room agent (FK-GAP-008), a FeltKit application agent (`app.agent`). A person @mentions it:
+ * The room agent, a FeltKit application agent (`app.agent`). A person @mentions it:
  * messages:send records an agentRequest (what was asked, by whom; the UI shows its state) and
  * triggers the agent with `ctx.afterCommit.agent`, in the same transaction. FeltKit runs the handler
  * after the commit as the agent's own principal ("assistant", type agent, role "agent"), through the

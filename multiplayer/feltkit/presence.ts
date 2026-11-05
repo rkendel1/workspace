@@ -3,7 +3,7 @@ import { app, presence, typing } from "./app.js";
 import { loadChannel, loadWorkspace } from "./_authz.js";
 
 /**
- * Presence (FK-GAP-004): who is around is durable enough to show to someone who opens the workspace
+ * Presence: who is around is durable enough to show to someone who opens the workspace
  * later, so it stays one bounded record per participant per workspace, overwritten in place. Clients
  * treat lastSeenAt older than 60 s as offline.
  */

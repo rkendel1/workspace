@@ -10,3 +10,6 @@ dist/
 !.env.example
 .feltdb/
 *.app/
+
+# Browser test screenshots
+e2e/screenshots/

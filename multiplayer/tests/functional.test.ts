@@ -198,7 +198,7 @@ test("the room agent works in every workspace it is a member of, and in none it 
   } finally { await t.close(); }
 });
 
-test("live queries re-run only for writes they can see (predicates on declared fields, FK-GAP-005)", async () => {
+test("live queries re-run only for writes they can see (predicates on declared fields)", async () => {
   const { t, ada, ws, general } = await setup();
   const http = await serve(t);
   try {

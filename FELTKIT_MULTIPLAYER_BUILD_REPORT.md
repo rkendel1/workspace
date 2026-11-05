@@ -81,7 +81,7 @@ flowchart LR
   CF --> A
 ```
 
-Details, the data model and the authorization model are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Details, the data model and the authorization model are in [multiplayer/docs/ARCHITECTURE.md](multiplayer/docs/ARCHITECTURE.md).
 
 ## 3. Platform components reused
 

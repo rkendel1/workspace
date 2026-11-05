@@ -36,7 +36,7 @@ export function WorkspaceView(props: { workspaceId: string; me: Me; live: boolea
   const skew = useRef(0);
   if (ws.data) skew.current = ws.data.now - Date.now();
 
-  // Presence: a heartbeat every 20 s and on visibility changes (FK-GAP-004 explains why it is a write).
+  // Presence: a heartbeat every 20 s and on visibility changes (it is a small write, so a page opened later sees who is around).
   useEffect(() => {
     // A refused heartbeat means the membership ended or changed: ask FeltKit again (a fallback; FeltKit's
     // change stream normally refreshes the session as soon as a membership changes).
