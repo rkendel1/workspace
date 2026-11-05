@@ -76,25 +76,13 @@ export const participants = app.collection("participants", {
   createdAt: s.number(),
 }, { unique: [["principalId"], ["handle"]] });
 
-// ── Workspace directory ─────────────────────────────────────────────────────
+// ── Workspace data ──────────────────────────────────────────────────────────
 
 export const ROLES = ["owner", "admin", "member", "guest", "agent"] as const;
 export type WorkspaceRole = (typeof ROLES)[number];
 
 /** Workspace-scoped data: FeltKit stamps the session's workspace into workspaceId and filters every read and write by it. */
 const WS = { tenant: { field: "workspaceId" } } as const;
-
-/**
- * Who has a profile in this workspace: the directory that mentions, direct messages, channel
- * invitations and presence choose from. Not authority: FeltKit's membership decides who may work in
- * the workspace. A person is listed when they first work in it (me:ensure); sample personas and the
- * room agent are listed by the functions that bring them in.
- */
-export const roster = app.collection("roster", {
-  workspaceId: s.string(),
-  participantId: s.ref(participants),
-  joinedAt: s.number(),
-}, { ...WS, unique: [["workspaceId", "participantId"]] });
 
 // ── Conversations ───────────────────────────────────────────────────────────
 

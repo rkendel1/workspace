@@ -1,23 +1,50 @@
-/** Write helpers shared by function modules (directory and channel membership side effects). */
-import { channelMembers, channels, messages, participants, roster } from "./app.js";
+/** Write helpers shared by function modules (workspace entry, the directory, channel membership). */
+import { activity, channelMembers, channels, messages, participants } from "./app.js";
 
 type W = { db: { find(c: any, f?: any): Promise<any[]>; insert(c: any, v: any): Promise<string> } };
+type R = { db: { find(c: any, f?: any): Promise<any[]>; get(c: any, id: string): Promise<any> } };
+type Members = { tenancy: { members(): Promise<Array<{ principalId: string; type: string; role: string }>> } };
 
 const DEFAULT_CHANNELS = [["general", "Company-wide announcements and work-based matters"], ["random", "Non-work banter and water cooler conversation"]] as const;
 
 /**
- * List a participant in the session's workspace directory and, unless they are a guest or an agent,
- * add them to its default channels. Idempotent. Returns true the first time. (Who may be in the
- * workspace at all is FeltKit's membership; this is the application's side of joining.)
+ * The application's side of joining the session's workspace (who may be in it is FeltKit's
+ * membership): the first time, a person (not a guest or an agent) joins its default channels, and the
+ * join is recorded in the activity log, which is also what marks it done. Returns true the first time.
  */
-export async function enterWorkspace(ctx: W, workspaceId: string, participantId: string, role: string): Promise<boolean> {
-  const [existing] = await ctx.db.find(roster, { participantId });
-  if (existing) return false;
-  await ctx.db.insert(roster, { workspaceId, participantId, joinedAt: Date.now() });
+export async function enterWorkspace(ctx: W, workspaceId: string, participant: { id: string; displayName: string }, role: string): Promise<boolean> {
+  if ((await ctx.db.find(activity, { type: "membership.joined", subjectId: participant.id })).length) return false;
   if (role !== "agent" && role !== "guest") {
-    for (const c of await ctx.db.find(channels, { isDefault: true })) await joinChannel(ctx, workspaceId, c.id, participantId);
+    for (const c of await ctx.db.find(channels, { isDefault: true })) await joinChannel(ctx, workspaceId, c.id, participant.id);
   }
+  await ctx.db.insert(activity, { workspaceId, actorId: participant.id, type: "membership.joined", summary: `${participant.displayName} joined as ${role}`, subjectId: participant.id, at: Date.now() });
   return true;
+}
+
+/**
+ * The workspace directory: participants who are in the session's workspace. People and agents are
+ * FeltKit's current members (ctx.tenancy.members(), live: a removed member is gone at once) that
+ * have a profile; sample personas, who have no principal and so cannot be members, are in the
+ * workspace's conversations. For mentions, DMs, channel invitations and presence.
+ */
+export async function directory(ctx: R & Members): Promise<any[]> {
+  const out = new Map<string, any>();
+  for (const m of await ctx.tenancy.members()) {
+    const [p] = await ctx.db.find(participants, { principalId: m.principalId });
+    if (p) out.set(p.id, p);
+  }
+  for (const cm of await ctx.db.find(channelMembers, {})) {
+    if (out.has(cm.participantId)) continue;
+    const p = await ctx.db.get(participants, cm.participantId);
+    if (p?.persona) out.set(p.id, p);
+  }
+  return [...out.values()];
+}
+
+/** Whether a participant is in the session's workspace (see directory). */
+export async function inWorkspace(ctx: R & Members, participant: { id: string; principalId: string; persona?: boolean }): Promise<boolean> {
+  if (participant.persona) return (await ctx.db.find(channelMembers, { participantId: participant.id })).length > 0;
+  return (await ctx.tenancy.members()).some((m) => m.principalId === participant.principalId);
 }
 
 /** A new workspace's default channels (#general, #random), created by the first person to work in it. */
@@ -27,11 +54,6 @@ export async function ensureDefaultChannels(ctx: W, workspaceId: string, created
     await ctx.db.insert(channels, { workspaceId, kind: "public", name, topic, createdBy, createdAt: Date.now(), isDefault: true });
   }
   return true;
-}
-
-/** Whether a participant is listed in the session's workspace directory. */
-export async function inWorkspace(ctx: W, participantId: string): Promise<boolean> {
-  return (await ctx.db.find(roster, { participantId })).length > 0;
 }
 
 export async function joinChannel(ctx: W, workspaceId: string, channelId: string, participantId: string) {

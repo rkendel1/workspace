@@ -18,8 +18,8 @@ export const get = app.query({
 
 /**
  * Create the caller's participant on first use and, in a session working in a workspace, enter it:
- * the workspace's default channels exist, and the caller is in its directory (and its default
- * channels unless a guest or an agent). Idempotent; clients call it after every switch.
+ * the workspace's default channels exist, and on first entry the caller joins them (unless a guest
+ * or an agent) and the join is recorded. Idempotent; clients call it after every switch.
  */
 export const ensure = app.mutation({
   access: "authenticated",
@@ -46,9 +46,7 @@ export const ensure = app.mutation({
       if (tenant.role !== "agent" && tenant.role !== "guest" && (await ensureDefaultChannels(ctx, tenant.id, p.id))) {
         await record(ctx, tenant.id, p.id, "workspace.created", `${p.displayName} set up ${tenant.name}`, tenant.id);
       }
-      if (await enterWorkspace(ctx, tenant.id, p.id, tenant.role)) {
-        await record(ctx, tenant.id, p.id, "membership.joined", `${p.displayName} joined as ${tenant.role}`, p.id);
-      }
+      await enterWorkspace(ctx, tenant.id, p, tenant.role);
     }
     return p;
   },

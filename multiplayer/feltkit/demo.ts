@@ -1,15 +1,15 @@
 import { fail, s } from "@feltdb/feltkit";
 import { app, channels, messages, participants, reactions } from "./app.js";
 import { loadWorkspace } from "./_authz.js";
-import { enterWorkspace, ensureRoomAgent, insertMessage, joinChannel } from "./_ops.js";
+import { ensureRoomAgent, insertMessage, joinChannel } from "./_ops.js";
 import { record } from "./_util.js";
 
 /**
  * Onboarding: "Explore a sample workspace". The client creates a real workspace (a FeltKit tenant,
  * client.createTenant("Northwind Labs")), adds the room agent to it (client.addMember), and calls
  * this in it: sample colleagues (personas: participants with no principal, so nobody can sign in as
- * them, listed in the workspace directory), an ongoing launch discussion, a thread, reactions, a
- * private channel, a DM, and the room agent in the directory. The caller (its owner) is the only real
+ * them, in the workspace through its conversations), an ongoing launch discussion, a thread, reactions, a
+ * private channel, a DM, and the room agent's profile. The caller (its owner) is the only real
  * member; everything in it works like any other workspace. Only into an empty workspace.
  */
 const PEOPLE = [
@@ -40,7 +40,7 @@ export const seed = app.mutation({
   args: { workspaceId: s.optional(s.string()) },
   returns: s.string(),
   handler: async (ctx) => {
-    const { participant: owner, workspaceId: ws, role } = await loadWorkspace(ctx);
+    const { participant: owner, workspaceId: ws } = await loadWorkspace(ctx);
     if ((await ctx.db.query(messages, { where: [], limit: 1 })).records.length) fail("FAILED_PRECONDITION", "The sample conversation goes into an empty workspace only.");
     const now = Date.now();
     const ids = {} as Record<Who, string>;
@@ -57,10 +57,9 @@ export const seed = app.mutation({
     const launch = await ch("launch-q1", "public", "Q1 launch of Multiplayer Teams · beta March 14");
     const design = await ch("design-crit", "private", "Work-in-progress design reviews");
 
-    await enterWorkspace(ctx, ws, owner.id, role);
+    // Personas are in the workspace through its conversations (they have no principal to be members).
     for (const pid of [owner.id, ...PEOPLE.map((p) => ids[p.handle])]) for (const c of [general, random]) await joinChannel(ctx, ws, c, pid);
-    for (const p of PEOPLE) await enterWorkspace(ctx, ws, ids[p.handle], "member");
-    await enterWorkspace(ctx, ws, await ensureRoomAgent(ctx), "agent");
+    await ensureRoomAgent(ctx);
     for (const pid of [owner.id, ids.maya, ids.jonas, ids.priya, ids.sam]) await joinChannel(ctx, ws, launch, pid);
     for (const pid of [owner.id, ids.priya, ids.maya]) await joinChannel(ctx, ws, design, pid);
 

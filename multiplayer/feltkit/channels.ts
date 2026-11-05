@@ -123,7 +123,8 @@ export const addMembers = app.mutation({
     if (channel.kind === "dm") fail("FAILED_PRECONDITION", "Start a group conversation to add people.");
     const names = [];
     for (const pid of participantIds) {
-      if (!(await inWorkspace(ctx, pid))) fail("NOT_FOUND", "Someone you added is not in this workspace.");
+      const p = await ctx.db.get(participants, pid);
+      if (!p || !(await inWorkspace(ctx, p))) fail("NOT_FOUND", "Someone you added is not in this workspace.");
       await joinChannel(ctx, channel.workspaceId, channelId, pid);
       names.push((await ctx.db.get(participants, pid))?.displayName ?? pid);
     }
@@ -141,7 +142,8 @@ export const openConversation = app.mutation({
     const { participant, workspaceId } = await loadWorkspace(ctx);
     const ids = [...new Set([participant.id, ...participantIds])].sort();
     for (const pid of ids) {
-      if (!(await inWorkspace(ctx, pid))) fail("NOT_FOUND", "Someone in that conversation is not in this workspace.");
+      const p = await ctx.db.get(participants, pid);
+      if (!p || !(await inWorkspace(ctx, p))) fail("NOT_FOUND", "Someone in that conversation is not in this workspace.");
     }
     const dmKey = ids.join(",");
     const [existing] = await ctx.db.find(channels, { dmKey });

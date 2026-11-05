@@ -109,10 +109,10 @@ browser checks, including a restart. See [../docs/DEPLOYMENT.md](../docs/DEPLOYM
 
 | Path | What it is |
 |---|---|
-| `feltkit/app.ts` | Roles (workspace roles are `auth.tenant` roles), accounts, tenancy, services, and the 11 collections (the data model; all but `participants` tenant-scoped) |
+| `feltkit/app.ts` | Roles (workspace roles are `auth.tenant` roles), accounts, tenancy, services, and the 10 collections (the data model; all but `participants` tenant-scoped) |
 | `feltkit/_authz.ts` | The conversation policy, registered as `feltkit({ authorize })`: the session's workspace and role from FeltKit (a different `workspaceId` argument is refused), private channels, DMs, the agent queue, for every function on every interface (default deny), plus loaders handlers use for context |
 | `feltkit/_ops.ts`, `_util.ts`, `_base64.ts` | Shared write helpers, mention parsing, the file byte codec |
-| `feltkit/workspaces.ts` … `agents.ts` | Queries and mutations (`<module>:<export>`), published in part as AppPort capabilities. `me:ensure` enters the session's workspace (directory, default channels) |
+| `feltkit/workspaces.ts` … `agents.ts` | Queries and mutations (`<module>:<export>`), published in part as AppPort capabilities. `me:ensure` enters the session's workspace (default channels); the directory is FeltKit's members (`ctx.tenancy.members()`) joined to profiles |
 | `feltkit/demo.ts` | Seeds the sample workspace (created by the client as a FeltKit tenant) |
 | `agent/` | The room agent: composer (pure), queue worker (transport-independent), process (HTTP) |
 | `src/` | React UI: `App.tsx` (which screen: FeltKit's SignIn, AcceptInvitation, CreateTenant; entering the workspace), `Workspace.tsx` (three columns, with FeltKit's TenantSwitcher, TenantSettings, InvitationsPanel, AccountSettings, AuthNotices, VerifyEmailBanner), `ui.tsx`, `styles.css` (FeltKit's components pick up its `--accent`, `--surface`, `--ink`, `--line`, `--radius`); `theme.tsx` comes from the FeltKit starter |

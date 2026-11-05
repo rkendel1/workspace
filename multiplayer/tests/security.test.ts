@@ -267,3 +267,21 @@ test("two workers racing for one request: exactly one answers", async () => {
     assert.equal(th.replies.filter((r: any) => r.author.handle === "assistant").length, 1);
   } finally { await t.close(); }
 });
+
+test("a removed member is no longer in the directory: no mention, no notification, no new DM", async () => {
+  const { t, ada, grace, ws, general } = await setup();
+  try {
+    const graceId = (await grace.query(api.me.get))!.participant.id;
+    await ada.mutation(api.messages.send, { channelId: general, text: "@grace before" });
+    assert.equal((await t.as(GRACE).query(api.inbox.list, { unread: true })).filter((n: any) => n.type === "mention").length, 1);
+    await t.tenancy!.remove(await actor(t, ws, ADA), GRACE.id);
+    assert.ok(!(await ada.query(api.workspaces.get, {})).members.some((m: any) => m.participantId === graceId));
+    const sent = await ada.mutation(api.messages.send, { channelId: general, text: "@grace after" });
+    const m = (await ada.query(api.messages.list, { channelId: general })).items.find((x: any) => x.id === sent.id)!;
+    assert.deepEqual(m.mentions, []);
+    assert.equal((await t.as(GRACE).query(api.inbox.list, { unread: true })).filter((n: any) => n.type === "mention").length, 1, "only the mention from before the removal");
+    await rejects(ada.mutation(api.channels.openConversation, { participantIds: [graceId] }), "NOT_FOUND");
+    const priv = await ada.mutation(api.channels.create, { name: "after", kind: "private" });
+    await rejects(ada.mutation(api.channels.addMembers, { channelId: priv, participantIds: [graceId] }), "NOT_FOUND");
+  } finally { await t.close(); }
+});

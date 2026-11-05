@@ -1,5 +1,5 @@
 import { fail, s } from "@feltdb/feltkit";
-import { agentRequests, app, messages, participants, sharedObjects } from "./app.js";
+import { activity, agentRequests, app, messages, participants, sharedObjects } from "./app.js";
 
 const Pending = s.array(s.object({ id: s.string(), workspaceId: s.string(), channelId: s.string(), prompt: s.string(), createdAt: s.number() }));
 const Context = s.object({
@@ -8,7 +8,7 @@ const Context = s.object({
   messages: s.array(s.object({ id: s.string(), author: s.string(), handle: s.string(), authorKind: s.string(), text: s.string(), createdAt: s.number() })),
 });
 import { me, readableChannels, loadChannel, loadWorkspace } from "./_authz.js";
-import { enterWorkspace, ensureRoomAgent, insertMessage, ROOM_AGENT } from "./_ops.js";
+import { ensureRoomAgent, insertMessage, ROOM_AGENT } from "./_ops.js";
 import { record } from "./_util.js";
 
 /**
@@ -21,9 +21,9 @@ import { record } from "./_util.js";
 const LEASE_MS = 2 * 60 * 1000;
 
 /**
- * List the room agent in the workspace directory (admins), so people can mention it. Its membership
- * is FeltKit's: an admin adds it first (client.addMember("assistant", "agent")); without that
- * membership the agent cannot work here, whatever this directory says.
+ * After an admin added the room agent to the workspace through FeltKit (client.addMember("assistant",
+ * "agent")): make sure it has a profile (so @assistant resolves before its process first runs) and
+ * record it. Mentions reach it only while it is a FeltKit member.
  */
 export const add = app.mutation({
   access: "workspaces.write",
@@ -32,7 +32,7 @@ export const add = app.mutation({
   handler: async (ctx) => {
     const { participant, workspaceId } = await loadWorkspace(ctx);
     const agentId = await ensureRoomAgent(ctx);
-    if (await enterWorkspace(ctx, workspaceId, agentId, "agent")) {
+    if (!(await ctx.db.find(activity, { type: "agent.added", subjectId: agentId })).length) {
       await record(ctx, workspaceId, participant.id, "agent.added", `${participant.displayName} added @${ROOM_AGENT} to the workspace`, agentId);
     }
     return agentId;

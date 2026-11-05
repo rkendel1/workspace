@@ -37,8 +37,8 @@ export function WorkspaceView(props: { workspaceId: string; me: Me; live: boolea
 
   // Presence: a heartbeat every 20 s and on visibility changes (FK-GAP-004 explains why it is a write).
   useEffect(() => {
-    // A refused heartbeat means the membership ended or changed (FeltKit sends no change event for
-    // memberships, so open queries learn it only when workspace data next changes): ask FeltKit again.
+    // A refused heartbeat means the membership ended or changed: ask FeltKit again (a fallback; FeltKit's
+    // change stream normally refreshes the session as soon as a membership changes).
     const beat = () => void heartbeat({ workspaceId, status: document.visibilityState === "visible" ? "active" : "away" }).catch((e) => {
       if (e?.code === "FORBIDDEN" || e?.code === "NOT_FOUND") { auth.refresh(); tenant.refresh(); }
     });
@@ -220,7 +220,7 @@ function Empty({ title, body, children }: { title: string; body: string; childre
 
 /**
  * Add the room agent: a FeltKit member with the role "agent" (FeltKit adds agent identities directly;
- * people are invited), then listed in this workspace's directory so people can mention it.
+ * people are invited), then make sure it has a profile so people can mention it.
  */
 function AddAgentButton({ toasts }: { toasts: Toasts }) {
   const client = useFeltKit();

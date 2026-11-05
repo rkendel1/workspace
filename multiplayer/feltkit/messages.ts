@@ -103,7 +103,7 @@ export const send = app.mutation({
     const mentioned = [];
     for (const h of mentionedHandles(body)) {
       const [p] = await ctx.db.find(participants, { handle: h });
-      if (p && (await inWorkspace(ctx, p.id))) mentioned.push(p);
+      if (p && (await inWorkspace(ctx, p))) mentioned.push(p);
     }
     const { id, seq, now } = await insertMessage(ctx, channel, participant.id, {
       text: body, root, mentions: mentioned.map((p) => p.id), sharedObjectId,

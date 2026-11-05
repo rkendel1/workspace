@@ -32,7 +32,7 @@ flowchart LR
 
 | Concern | Owner | In this app |
 |---|---|---|
-| Durable state | FeltDB (through `ctx.db`) | 11 collections, all but `participants` tenant-scoped; each mutation is one atomic transaction; reads are fenced at commit |
+| Durable state | FeltDB (through `ctx.db`) | 10 collections, all but `participants` tenant-scoped; each mutation is one atomic transaction; reads are fenced at commit |
 | Accounts, sessions | FeltKit `auth.accounts` | Password and e-mailed sign-in link/code, verification, reset, account settings; browser sessions are an HttpOnly cookie |
 | Workspaces, memberships, roles, invitations, switching | FeltKit `auth.tenant` (`name: "workspace"`, roles owner > admin > member > guest > agent) | A workspace is a tenant. The session works in one; its role there is resolved from the live membership on every request and held as an ordinary role. Invitations by e-mail (single use, 7 days, revocable); agents and services added directly |
 | Capability and permission boundary | AppPort, via FeltKit's authority | Accounts hold `person` (nothing in a workspace); workspace roles hold `channels.*`, `messages.*`, …, owner/admin also `tenant.*` / `tenant.members.manage`; the room agent `agent`; operators `operator` (Studio, credentials, jobs) |
@@ -51,7 +51,6 @@ flowchart LR
 |---|---|---|
 | `participants` | identity | unique `principalId`, unique `handle`; `kind` human or agent; `agentType` personal, workspace or application; `persona` for sample people (no principal) |
 | *(FeltKit)* tenants, memberships, invitations | **authoritative** | FeltKit's own collections (`_feltkit_tenants`, `_feltkit_memberships`, `_feltkit_invitations`); invitation links carry an HMAC token that is never stored |
-| `roster` | directory (not authority) | unique (workspace, participant): who has a profile in the workspace, for mentions, DMs, channel invitations, presence. Written when a person first works in the workspace (`me:ensure`), by `agents:add`, and by the sample seed for personas |
 | `channels` | conversation | public, private, dm or group; unique (workspace, dmKey) for DMs/groups |
 | `channelMembers` | **authoritative** | unique (channel, participant); `lastReadSeq` drives unread counts |
 | `messages` | durable record | `seq` from `ctx.db.sequence("msg:<channel>")` (commit order, no gaps); `rootId` for threads; soft delete |
@@ -95,10 +94,13 @@ transaction as the reply.
 Client-supplied workspace ids, participant ids and roles are never trusted. The caller's participant
 is always derived from the verified principal, the workspace and role from FeltKit's session.
 
-Known limits: the workspace directory (`roster`) is the application's and can name someone FeltKit
-has since removed (they can read nothing, but a mention would still notify them), because a function
-cannot read FeltKit's memberships; and FeltKit emits no change event for a membership change, so a
-removed member's open page learns it at its next refused call (≤ 20 s, the presence heartbeat).
+The workspace directory (who can be mentioned, messaged, added to a channel, shown with presence) is
+not stored by the application: it is FeltKit's current members (`ctx.tenancy.members()`) joined to
+`participants` by principal id, plus the sample personas, who have no principal and are in a
+workspace through its conversations. A removed member drops out of it at once: no mention, no
+notification, no new DM. Membership changes reach FeltKit's change stream, so live queries and the
+session re-run and a removed member's open page updates within a fraction of a second (≈0.2 s in the
+e2e).
 
 ## Real-time and recovery
 

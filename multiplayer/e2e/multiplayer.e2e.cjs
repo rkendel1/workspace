@@ -312,12 +312,11 @@ async function waitFor(url, timeout = 60000) {
     grace.once("dialog", () => undefined);
     ada.once("dialog", (d) => d.accept());
     await ada.getByRole("listitem").filter({ hasText: graceName }).getByRole("button", { name: "Remove" }).click();
-    await ada.getByText(`${graceName} was removed.`).waitFor();
-    // FeltKit sends no change event for a membership: her open page learns it at its next refused
-    // call (its presence heartbeat, every 20 s, or any query re-run when workspace data changes).
+    // A membership change reaches the change stream: her open page updates at once (no reload).
     const t0 = Date.now();
-    await grace.getByRole("button", { name: "Create workspace" }).waitFor({ timeout: 30000 });
+    await grace.getByRole("button", { name: "Create workspace" }).waitFor({ timeout: 5000 });
     const noticedMs = Date.now() - t0;
+    await ada.getByText(`${graceName} was removed.`).waitFor();
     await shot(grace, "16-removed.png");
     return { removedMemberNoticedMs: noticedMs };
   });

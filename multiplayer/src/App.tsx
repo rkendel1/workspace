@@ -46,7 +46,7 @@ export function App() {
   );
 }
 
-/** Enter the session's workspace (profile, directory, default channels), then show it. */
+/** Enter the session's workspace (profile, default channels), then show it. */
 function Enter(props: { workspaceId: string; live: boolean; toasts: ReturnType<typeof useToasts> }) {
   const ensure = useMutation(api.me.ensure);
   const me = useQueryState(api.me.get);
