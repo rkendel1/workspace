@@ -4,7 +4,7 @@
 
 Project: Multiplayer (rkendel1/workspace, multiplayer/). Platform: @feltdb/feltkit 0.3.15, create-feltkit 0.3.15, @feltdb/core 0.21.0, @appport/sdk 1.4.0, @appport/services 0.15.0, @appport/appboundry 1.8.0.
 
-Platform source revisions read: rkendel1/feltkit@50bc617, rkendel1/appboundry@94502ef, rkendel1/appport@e9815a5, rkendel1/authboundry@b8ed659, rkendel1/appport-services@ac20b5a, rkendel1/feltkit (work)@f20ed78 on claude/product-primitives (local, unpushed, unreleased), rkendel1/appport (work)@f1f8c21 on claude/scoped-event-authorization (local, unpushed, unreleased).
+Platform source revisions read: rkendel1/feltkit@50bc617, rkendel1/appboundry@94502ef, rkendel1/appport@e9815a5, rkendel1/authboundry@b8ed659, rkendel1/appport-services@ac20b5a, rkendel1/feltkit (work)@f20ed78, 7f8e71d, a65a38e on claude/product-primitives (local, unpushed, unreleased), rkendel1/appport (work)@f1f8c21 on claude/scoped-event-authorization (local, unpushed, unreleased), rkendel1/appboundry (work)@c925d91 on claude/crypto-host-interface (local, unpushed, unreleased).
 
 **Gap-to-code accounting:** ≈550 code lines (≈22% of custom code); the attributions overlap slightly (FK-GAP-001 call sites sit inside modules also attributed to FK-GAP-003/007/008), deduplicated ≈520. ≈370 code lines (≈15%) if FK-GAP-001, -003, -004, -006, -007, -008 were closed; the rest relocates or is application semantics. Method: cloc 2.00 on each file (tools/measure.mjs); function-level counts by non-blank, non-comment lines of the named exports.
 
@@ -23,7 +23,7 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 | [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | open (workaround in app) |
 | [FK-GAP-008](#fk-gap-008) | No hosted, event-triggered execution for application agents | missing-capability | primitive | high | P1 | FeltKit + AppBoundry (execution); FeltDB agent state | open (workaround in app) |
 | [FK-GAP-009](#fk-gap-009) | AppBoundry deployment (Hetzner) is not available to an application | unsupported-requirement | deployment | high | P1 | AppBoundry | blocking deployment acceptance |
-| [FK-GAP-010](#fk-gap-010) | No secure token / random primitive for application bearer secrets | missing-capability | primitive | medium | P2 | FeltKit + AppBoundry host ABI | open (limitation documented) |
+| [FK-GAP-010](#fk-gap-010) | No secure token / random primitive for application bearer secrets | missing-capability | primitive | medium | P2 | FeltKit (ctx.crypto) + AppBoundry (host interface crypto@1) — each in its own repository | implemented in FeltKit and AppBoundry (local commits, unreleased); consumer acceptance passed |
 | [FK-GAP-011](#fk-gap-011) | Client reconnect waits out exponential backoff (up to 10 s) after the network returns | developer-experience | client | low | P3 | FeltKit client | open |
 | [FK-GAP-012](#fk-gap-012) | Capabilities require hand-written output schemas even when the handler's return type is known | developer-experience | dx | low | P3 | FeltKit | accepted (by design) |
 | [FK-GAP-013](#fk-gap-013) | FeltKit built-in accounts (sign-up / sign-in) are not available when the artifact runs on AppBoundry | missing-integration | integration | high | P1 | AppBoundry (identity host interface); AuthBoundry as the eventual identity owner | open (blocks self-serve onboarding on the approved target) |
@@ -469,7 +469,7 @@ Discovered 2026-11-05 · unsupported-requirement · deployment · severity high 
 
 ### No secure token / random primitive for application bearer secrets
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · open (limitation documented)
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · implemented in FeltKit and AppBoundry (local commits, unreleased); consumer acceptance passed
 
 **Components:**
 
@@ -491,7 +491,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **Workaround:** Accepted 48-bit codes, documented as a known limitation; mitigated by expiry, single use and revocation (no rate limiting).
 
-**Custom LOC attributable:** 0 (limitation accepted)
+**Custom LOC attributable:** 0 after the primitive (consumer: one call)
 
 **Engineering time attributable:** 0.5 h
 
@@ -501,9 +501,44 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **Proposed change:** ctx.crypto.token(bytes=32) (host-provided CSPRNG in both runtimes), or a platform 'link token' primitive: issue/verify/revoke a signed, expiring, single-use token bound to a record.
 
-**Architectural owner:** FeltKit + AppBoundry host ABI
+**Architectural owner:** FeltKit (ctx.crypto) + AppBoundry (host interface crypto@1) — each in its own repository
 
 **Dependencies:** none
+
+#### Platform work (2026-11-05)
+
+**What was missing:** A secure random source for bearer values that works in FeltKit's runtime and inside the AppBoundry WebAssembly guest (which has no entropy source and no ambient capabilities).
+
+**What existed already:** FeltKit's optional host-interface pattern (transactions@1: declared by the build only when used, refused by hosts for artifacts that did not declare it, refused at load by runtimes that do not implement it); Node's CSPRNG on the host side.
+
+**Reused:**
+
+- the optional-interface pattern (build detection, manifest runtime.interfaces, host refusal)
+- AppBoundry's SUPPORTED_INTERFACES compatibility check (ARTIFACT_INTERFACE_UNSUPPORTED)
+- crypto.randomBytes
+
+**Implemented:**
+
+- FeltKit: ctx.crypto.token(bytes=32) on QueryCtx/MutationCtx (src/runtime/crypto-token.ts, runtime, guest host op `crypto.token`, reference host, build detection usesCrypto → crypto@1); type CryptoContext exported; docs README/GUARANTEES/CHANGELOG
+- AppBoundry: SUPPORTED_INTERFACES.crypto=[1]; host op crypto.token (16–256 bytes, base64url; FORBIDDEN without the interface); docs/feltkit-deploy-readiness.md (closed operation set)
+
+**Public API:** await ctx.crypto.token(bytes?: number): Promise<string>  (16–256 bytes, default 32, base64url). Artifact manifest: runtime.interfaces.crypto = 1 when used. AppBoundry host operation crypto.token.
+
+**Tests:**
+
+- FeltKit test/crypto-token.test.ts (3): 200 tokens unique, 32 bytes, every bit varies across the sample; bounds; artifact on the reference host; manifest declares crypto@1 only when used; host refuses without it
+- AppBoundry packages/appboundry-host/test/crypto.test.ts (3); appboundry-host suite 75 passed, 13 skipped (incl. isolation verification)
+- Cross-runtime: FeltKit-built artifacts run on AppBoundry's runtime host (local build): crypto@1 tokens drawn by AppBoundry; the authorize hook (FK-GAP-001) enforced inside the artifact. The published @appport/appboundry 1.8.0 refuses the crypto artifact at load (ARTIFACT_INTERFACE_UNSUPPORTED) and loads the authorize artifact.
+- FeltKit full suite: 392/392 (391 + the docs-citation test re-run after a docs fix)
+
+**Consumer acceptance:** acceptance/feltkit-crypto-token/run.sh: Multiplayer's invitation codes become ctx.crypto.token() values (stored, unique, looked up by code) in a scratch copy on the local FeltKit — runtime: 18/18; compiled artifact: 18/18 (manifest declares crypto@1).
+
+**Measured effect:** Invitation codes go from 48 random bits + a timestamp (record id) to 256 random bits. Code change in the consumer: one call to create the code and lookups by `code` instead of by id (+1 collection field, unique).
+
+**Remaining / unverified:**
+
+- Not released (FeltKit and AppBoundry publishing need approval). Until AppBoundry ships crypto@1, an artifact using ctx.crypto.token cannot run on the published runtime (refused at load, clearly).
+- No rate limiting of invitation attempts (application/edge concern).
 
 ## FK-GAP-011
 

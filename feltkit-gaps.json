@@ -15,8 +15,9 @@
     "rkendel1/appport": "e9815a5",
     "rkendel1/authboundry": "b8ed659",
     "rkendel1/appport-services": "ac20b5a",
-    "rkendel1/feltkit (work)": "f20ed78 on claude/product-primitives (local, unpushed, unreleased)",
-    "rkendel1/appport (work)": "f1f8c21 on claude/scoped-event-authorization (local, unpushed, unreleased)"
+    "rkendel1/feltkit (work)": "f20ed78, 7f8e71d, a65a38e on claude/product-primitives (local, unpushed, unreleased)",
+    "rkendel1/appport (work)": "f1f8c21 on claude/scoped-event-authorization (local, unpushed, unreleased)",
+    "rkendel1/appboundry (work)": "c925d91 on claude/crypto-host-interface (local, unpushed, unreleased)"
   },
   "classifications": [
     "missing-capability",
@@ -237,7 +238,8 @@
       "severity": "medium",
       "priority": "P2",
       "status": "open",
-      "codeKind": "—"
+      "codeKind": "—",
+      "reuseFinding": "FeltDB already offers predicate-level read bases (db.readBasis(predicates)), which FeltKit uses to fence mutation reads (runtime/data.ts #fence). Predicate-level invalidation should reuse it (a FeltDB 'changed since basis' check, or change events carrying the predicate keys) rather than a new FeltKit tracker. Needs a FeltDB-side decision and rkendel1/flow_db; not started."
     },
     {
       "id": "FK-GAP-006",
@@ -384,16 +386,43 @@
       "provided": "Record ids (48 random bits). Sessions/API keys exist but are for principals, not app-level links.",
       "implementedManually": "Invitation = record id used as the code; single use, 7-day expiry, revocable, audited.",
       "workaround": "Accepted 48-bit codes, documented as a known limitation; mitigated by expiry, single use and revocation (no rate limiting).",
-      "customLoc": "0 (limitation accepted)",
+      "customLoc": "0 after the primitive (consumer: one call)",
       "estimatedHours": "0.5 h",
       "codeFate": "Invitation code generation would become one platform call; the invitation lifecycle stays app code.",
       "proposal": "ctx.crypto.token(bytes=32) (host-provided CSPRNG in both runtimes), or a platform 'link token' primitive: issue/verify/revoke a signed, expiring, single-use token bound to a record.",
-      "owner": "FeltKit + AppBoundry host ABI",
+      "owner": "FeltKit (ctx.crypto) + AppBoundry (host interface crypto@1) — each in its own repository",
       "dependencies": [],
       "severity": "medium",
       "priority": "P2",
-      "status": "open (limitation documented)",
-      "codeKind": "—"
+      "status": "implemented in FeltKit and AppBoundry (local commits, unreleased); consumer acceptance passed",
+      "codeKind": "—",
+      "resolution": {
+        "date": "2026-11-05",
+        "missing": "A secure random source for bearer values that works in FeltKit's runtime and inside the AppBoundry WebAssembly guest (which has no entropy source and no ambient capabilities).",
+        "existed": "FeltKit's optional host-interface pattern (transactions@1: declared by the build only when used, refused by hosts for artifacts that did not declare it, refused at load by runtimes that do not implement it); Node's CSPRNG on the host side.",
+        "reused": [
+          "the optional-interface pattern (build detection, manifest runtime.interfaces, host refusal)",
+          "AppBoundry's SUPPORTED_INTERFACES compatibility check (ARTIFACT_INTERFACE_UNSUPPORTED)",
+          "crypto.randomBytes"
+        ],
+        "implemented": [
+          "FeltKit: ctx.crypto.token(bytes=32) on QueryCtx/MutationCtx (src/runtime/crypto-token.ts, runtime, guest host op `crypto.token`, reference host, build detection usesCrypto → crypto@1); type CryptoContext exported; docs README/GUARANTEES/CHANGELOG",
+          "AppBoundry: SUPPORTED_INTERFACES.crypto=[1]; host op crypto.token (16–256 bytes, base64url; FORBIDDEN without the interface); docs/feltkit-deploy-readiness.md (closed operation set)"
+        ],
+        "publicApi": "await ctx.crypto.token(bytes?: number): Promise<string>  (16–256 bytes, default 32, base64url). Artifact manifest: runtime.interfaces.crypto = 1 when used. AppBoundry host operation crypto.token.",
+        "tests": [
+          "FeltKit test/crypto-token.test.ts (3): 200 tokens unique, 32 bytes, every bit varies across the sample; bounds; artifact on the reference host; manifest declares crypto@1 only when used; host refuses without it",
+          "AppBoundry packages/appboundry-host/test/crypto.test.ts (3); appboundry-host suite 75 passed, 13 skipped (incl. isolation verification)",
+          "Cross-runtime: FeltKit-built artifacts run on AppBoundry's runtime host (local build): crypto@1 tokens drawn by AppBoundry; the authorize hook (FK-GAP-001) enforced inside the artifact. The published @appport/appboundry 1.8.0 refuses the crypto artifact at load (ARTIFACT_INTERFACE_UNSUPPORTED) and loads the authorize artifact.",
+          "FeltKit full suite: 392/392 (391 + the docs-citation test re-run after a docs fix)"
+        ],
+        "consumer": "acceptance/feltkit-crypto-token/run.sh: Multiplayer's invitation codes become ctx.crypto.token() values (stored, unique, looked up by code) in a scratch copy on the local FeltKit — runtime: 18/18; compiled artifact: 18/18 (manifest declares crypto@1).",
+        "measuredEffect": "Invitation codes go from 48 random bits + a timestamp (record id) to 256 random bits. Code change in the consumer: one call to create the code and lookups by `code` instead of by id (+1 collection field, unique).",
+        "remaining": [
+          "Not released (FeltKit and AppBoundry publishing need approval). Until AppBoundry ships crypto@1, an artifact using ctx.crypto.token cannot run on the published runtime (refused at load, clearly).",
+          "No rate limiting of invitation attempts (application/edge concern)."
+        ]
+      }
     },
     {
       "id": "FK-GAP-011",
@@ -675,6 +704,14 @@
             "change": "AppPort: subscriptions and deliveries authorized by the application Authorizer; scoped events",
             "owner": "AppPort",
             "state": "implemented, tested (1812 passed); unreleased; unblocks FeltKit ephemeral realtime"
+          },
+          {
+            "gaps": [
+              "FK-GAP-010"
+            ],
+            "change": "ctx.crypto.token + AppBoundry host interface crypto@1",
+            "owner": "FeltKit + AppBoundry",
+            "state": "implemented, tested, consumer acceptance passed; unreleased"
           }
         ]
       },
@@ -688,14 +725,6 @@
             "change": "FeltKit integration of AppPort scoped events (publish from functions, client subscribe, scopes decided by the authorize hook)",
             "owner": "FeltKit",
             "state": "blocked on AppPort release"
-          },
-          {
-            "gaps": [
-              "FK-GAP-010"
-            ],
-            "change": "ctx.crypto.token(bytes): host CSPRNG in FeltKit's runtime and the AppBoundry guest ABI",
-            "owner": "FeltKit + AppBoundry",
-            "state": "not started"
           },
           {
             "gaps": [
@@ -786,7 +815,7 @@
             ],
             "change": "predicate-level live-query invalidation",
             "owner": "FeltDB (change listener) + FeltKit",
-            "state": "not started"
+            "state": "not started — reuse FeltDB readBasis (see register)"
           },
           {
             "gaps": [

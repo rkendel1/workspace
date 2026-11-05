@@ -14,13 +14,13 @@ Each change lives with the component that owns the concept (FeltKit composes; Ap
 |---|---|---|---|---|
 | [FK-GAP-001](FELTKIT_GAP_REGISTER.md#fk-gap-001) | feltkit({ authorize }) | FeltKit | implemented, tested (389/389), consumer acceptance passed; unreleased | implemented in FeltKit (local commit f20ed78, unreleased); consumer acceptance passed |
 | [FK-GAP-017](FELTKIT_GAP_REGISTER.md#fk-gap-017), [FK-GAP-004](FELTKIT_GAP_REGISTER.md#fk-gap-004) | AppPort: subscriptions and deliveries authorized by the application Authorizer; scoped events | AppPort | implemented, tested (1812 passed); unreleased; unblocks FeltKit ephemeral realtime | fixed in AppPort locally (f1f8c21, unreleased, unpushed); needs review and release; partially addressed — AppPort prerequisite implemented locally (f1f8c21, unreleased); FeltKit integration blocked on an AppPort release (publishing needs approval) |
+| [FK-GAP-010](FELTKIT_GAP_REGISTER.md#fk-gap-010) | ctx.crypto.token + AppBoundry host interface crypto@1 | FeltKit + AppBoundry | implemented, tested, consumer acceptance passed; unreleased | implemented in FeltKit and AppBoundry (local commits, unreleased); consumer acceptance passed |
 
 ## Next — small, high leverage
 
 | Gaps | Change | Owner | State | Gap status |
 |---|---|---|---|---|
 | [FK-GAP-004](FELTKIT_GAP_REGISTER.md#fk-gap-004) | FeltKit integration of AppPort scoped events (publish from functions, client subscribe, scopes decided by the authorize hook) | FeltKit | blocked on AppPort release | partially addressed — AppPort prerequisite implemented locally (f1f8c21, unreleased); FeltKit integration blocked on an AppPort release (publishing needs approval) |
-| [FK-GAP-010](FELTKIT_GAP_REGISTER.md#fk-gap-010) | ctx.crypto.token(bytes): host CSPRNG in FeltKit's runtime and the AppBoundry guest ABI | FeltKit + AppBoundry | not started | open (limitation documented) |
 | [FK-GAP-011](FELTKIT_GAP_REGISTER.md#fk-gap-011) | client reconnect on online/visibilitychange | FeltKit client | not started | open |
 | [FK-GAP-001](FELTKIT_GAP_REGISTER.md#fk-gap-001) | optional per-function `resource` declaration so a central policy does not infer resources from argument names | FeltKit | proposed (from consumer acceptance) | implemented in FeltKit (local commit f20ed78, unreleased); consumer acceptance passed |
 | [FK-GAP-016](FELTKIT_GAP_REGISTER.md#fk-gap-016) | appport add --non-interactive | AppPort CLI | not started | open |
@@ -40,7 +40,7 @@ Each change lives with the component that owns the concept (FeltKit composes; Ap
 |---|---|---|---|---|
 | [FK-GAP-009](FELTKIT_GAP_REGISTER.md#fk-gap-009) | managed AppBoundry target (routing/TLS, verified runtime, tokens) | AppBoundry | blocked (infrastructure) | blocking deployment acceptance |
 | [FK-GAP-015](FELTKIT_GAP_REGISTER.md#fk-gap-015) | one AppBoundry artifact contract for every producer | AppBoundry + AppPort + FeltKit | not started | open |
-| [FK-GAP-005](FELTKIT_GAP_REGISTER.md#fk-gap-005) | predicate-level live-query invalidation | FeltDB (change listener) + FeltKit | not started | open |
+| [FK-GAP-005](FELTKIT_GAP_REGISTER.md#fk-gap-005) | predicate-level live-query invalidation | FeltDB (change listener) + FeltKit | not started — reuse FeltDB readBasis (see register) | open |
 | [FK-GAP-014](FELTKIT_GAP_REGISTER.md#fk-gap-014) | AppBoundry serves /appport and /mcp | AppBoundry | not started | open |
 | [FK-GAP-006](FELTKIT_GAP_REGISTER.md#fk-gap-006) | text predicate / search index | FeltDB + FeltKit | not started | open (workaround in app) |
 | [FK-GAP-018](FELTKIT_GAP_REGISTER.md#fk-gap-018) | AppPort decision code for concealment | AppPort | not started | open (FeltKit workaround in the primitive) |
