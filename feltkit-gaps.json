@@ -16,7 +16,13 @@
     "rkendel1/appport": "c637e8e (main; includes f1f8c21)",
     "rkendel1/appboundry": "7dc1510 (main; includes c925d91)",
     "rkendel1/authboundry": "b8ed659",
-    "rkendel1/appport-services": "ac20b5a"
+    "rkendel1/appport-services": "ac20b5a",
+    "work in progress (local, not pushed)": {
+      "feltkit": "claude/remaining-primitives 3abc1bd (011, 018 — mergeable now); claude/scoped-events af5b290 (AppPort 1.5 adoption fdff8eb + 004 — merge after AppPort release)",
+      "appport": "claude/remaining-primitives ada9157 (core portability 66a7874, NOT_FOUND decisions 81ba58f, per-connection subscriptions ada9157)",
+      "appboundry": "claude/remaining-primitives f3fd439 (appport add help 5b1e311, events@1 f3fd439)",
+      "resolver": "claude/appport-1.5 c61fe14"
+    }
   },
   "classifications": [
     "missing-capability",
@@ -187,26 +193,24 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "partially addressed — AppPort half released (scoped events, subscription authorization); FeltKit integration not built (FeltKit 0.3.16 still on @appport/sdk 1.4.0). Multiplayer keeps its bounded presence records until then.",
+      "status": "implemented across AppPort, FeltKit and AppBoundry (local branches); Multiplayer adoption blocked on the AppPort release",
       "codeKind": "platform integration glue (workaround)",
       "resolution": {
         "date": "2026-11-05",
         "existed": "AppPort events: defineEvent (with authorization), subscribe/unsubscribe/event envelopes, at-most-once EventBus ('nothing is buffered for absent subscribers'), WebSocket and SSE (/appport/events) delivery. This is the ephemeral channel; FeltKit should not build another.",
         "defectFound": "AppPort delivered events a session may not observe: a '*' subscription required nothing and received every event (spec §21.7 violated), and subscriptions were checked against session.permissions only (never the application's Authorizer), so principal-identified connections could not subscribe to permissioned events. Events had no scope, so per-tenant events would reach every tenant. Reproduced by packages/server/test/subscriptions.test.ts before the fix.",
         "implemented": [
-          "AppPortApplication.authorizeObservation (the application's Authorizer decides: event as capability, declared permissions as required, { scope } as input)",
-          "AppPortConnection: exact subscriptions authorized when made; every delivery re-authorized (wildcard leak closed; revocation applies to live subscriptions)",
-          "Scoped events: optional `scope` on event/subscribe envelopes (validated; spec §9.3/§9.4 and envelope JSON schema), EmitEventInput.scope, EventFilter.scope; SSE ?scope="
+          "FeltKit: app.event, ctx.events.publish (after commit, never stored), observation via authorize (kind 'observe'), client.subscribe/useEvent over /appport/events, events@1 in artifacts (af5b290)",
+          "AppBoundry: host interface events@1 — events.stage, host.observe (guest decides), AppPort event registration and emission (f3fd439)",
+          "AppPort: per-connection subscription ids (ada9157) — required for more than one subscriber"
         ],
         "tests": [
-          "packages/server/test/subscriptions.test.ts: 5 tests incl. a real HTTP SSE stream",
-          "AppPort full suite: 1812 passed, 1 skipped (baseline 1807 passed, 1 skipped)"
+          "feltkit test/events.test.ts (4); suite 401/401 with AppPort fixes overlaid",
+          "appboundry packages/appboundry-host/test/events.test.ts (3, incl. HTTP SSE + revocation); host suite 78/13 skipped",
+          "cross-runtime: a FeltKit-built artifact with app.event on AppBoundry's host: member received, non-member nothing"
         ],
         "remaining": [
-          "Release of AppPort (approval).",
-          "FeltKit integration: declare events in feltkit({...}), publish from functions with scope, client subscribe; the FeltKit authorize hook then decides scopes (e.g. workspace membership).",
-          "AppPort client/transport API to pass `scope` (protocol and server done; client SDK not changed).",
-          "Compatibility: an AppPort app with no authorizer (publicOnlyAuthorizer) can no longer open permissioned subscriptions from session.permissions alone."
+          "Release AppPort (core 1.6.1 + server with ada9157), then FeltKit/AppBoundry, then Multiplayer replaces its presence collection and heartbeat writes with presence events."
         ],
         "released": "AppPort half published (see FK-GAP-017). Next: FeltKit adopts @appport/sdk 1.5.0 / server 1.2.0 and exposes scoped events; then Multiplayer's presence collection and heartbeat mutation are removed."
       }
@@ -302,7 +306,8 @@
       "severity": "medium",
       "priority": "P2",
       "status": "open (workaround in app)",
-      "codeKind": "glue (transfer) + application semantics (binding)"
+      "codeKind": "glue (transfer) + application semantics (binding)",
+      "ownershipEvidence": "AppPort Services Files passes only { owner } as resource attributes to the authorizer (src/files/service.ts), not the file's metadata, so no policy can decide by the resource a file belongs to. Owner of that change: AppPort Services; the transfer route (signed download/upload) is FeltKit's."
     },
     {
       "id": "FK-GAP-008",
@@ -452,8 +457,17 @@
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "open",
-      "codeKind": "—"
+      "status": "implemented (FeltKit 40ba4ad, local); awaiting review/release; Multiplayer e2e catch-up to be re-measured on release",
+      "codeKind": "—",
+      "resolution": {
+        "date": "2026-11-05",
+        "implemented": [
+          "client waitOrWake: backoff ends early on window 'online' or document visible; backoff resets after a wake"
+        ],
+        "tests": [
+          "test/client-reconnect.test.ts (5)"
+        ]
+      }
     },
     {
       "id": "FK-GAP-012",
@@ -591,7 +605,7 @@
       "components": [
         "appport CLI 1.3.0"
       ],
-      "description": "`appport add` asks for the application and each capability on a TTY. Piped stdin ends the run ('Detected unsettled top-level await', exit 13) because each prompt opens a new reader; no flags or file input were discoverable (`appport add --help` prints the top-level help). The WASM build then needs `rustup target add wasm32-unknown-unknown`; the CLI says so clearly and resumes without repeating setup.",
+      "description": "`appport add` asks for the application and each capability on a TTY. Piped stdin ends the run ('Detected unsettled top-level await', exit 13) because each prompt opens a new reader; no flags or file input were discoverable (`appport add --help` prints the top-level help). The WASM build then needs `rustup target add wasm32-unknown-unknown`; the CLI says so clearly and resumes without repeating setup. CORRECTED 2026-11-05: flags existed; see resolution.finding.",
       "evidence": [
         "printf answers | npx appport add → exits after 'Application ID' prompt with 'Warning: Detected unsettled top-level await'",
         "driving prompts one at a time (tools: /tmp drive-add.cjs) completes; 'error The generated boundary is ready, but the WASM toolchain could not build it. Install Rust and the target…'"
@@ -600,7 +614,7 @@
       "provided": "Interactive prompts; clear resume message.",
       "implementedManually": "A small prompt driver for the comparison experiment (not part of the app).",
       "workaround": "Answer prompts one by one.",
-      "customLoc": "0 (app)",
+      "customLoc": "0",
       "estimatedHours": "0.5",
       "codeKind": "—",
       "codeFate": "n/a",
@@ -609,7 +623,18 @@
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "open"
+      "status": "closed in code (AppBoundry 5b1e311, local): the gap was smaller than recorded",
+      "resolution": {
+        "date": "2026-11-05",
+        "finding": "appport add already accepted every answer as a flag (--name, --id, --version, --description, --capability, --input, --output, --authorization) and completes without a terminal (verified with appport 1.3.1, stdin closed, exit 0). The real defects: undocumented (appport add --help printed the generic help, exit 1) and, without a terminal and without flags, a crash on an unsettled await.",
+        "implemented": [
+          "COMMAND_HELP.add (flags, example, Rust wasm32 requirement)",
+          "no-TTY refusal naming the missing flag"
+        ],
+        "tests": [
+          "packages/cli/test/add-non-interactive.test.ts (4)"
+        ]
+      }
     },
     {
       "id": "FK-GAP-017",
@@ -670,7 +695,104 @@
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "open (FeltKit workaround in the primitive)"
+      "status": "implemented (AppPort 81ba58f + FeltKit 3abc1bd, local); awaiting review/release",
+      "resolution": {
+        "date": "2026-11-05",
+        "implemented": [
+          "AppPort: DenialCode adds NOT_FOUND; deny(); decisionToError; subscriptions report it; spec 12.3/9.4",
+          "FeltKit: authorize honours a returned NOT_FOUND decision"
+        ],
+        "tests": [
+          "appport packages/server/test/conceal.test.ts (3); suite 1818+",
+          "feltkit test/authorize.test.ts"
+        ]
+      }
+    },
+    {
+      "id": "FK-GAP-019",
+      "title": "@appport/core 1.6.0 is not portable: a test-only barrier imports node:fs/node:path at load",
+      "category": "missing-capability",
+      "layer": "defect",
+      "components": [
+        "rkendel1/appport packages/core/src/execution-barrier.ts"
+      ],
+      "description": "sdk 1.5.0 re-exports runtime-host hooks, so every bundle reaching @appport/sdk reaches server-internal → execution-barrier, which imported node:fs/node:path statically. FeltKit's AppBoundry build (correctly) refuses Node APIs, so upgrading FeltKit to AppPort 1.5 broke all 18 artifact tests.",
+      "evidence": [
+        "feltkit suite on sdk 1.5.0: 18 failures, 'node_modules/@appport/core/dist/execution-barrier.js:11: node:fs is a Node API'",
+        "with the fix overlaid: 397/397"
+      ],
+      "status": "fixed in AppPort (66a7874, local) with a portability test over core's import graph; needs core 1.6.1",
+      "owner": "AppPort",
+      "severity": "high",
+      "priority": "P1",
+      "discovered": "2026-11-05",
+      "wanted": "—",
+      "provided": "—",
+      "implementedManually": "—",
+      "workaround": "—",
+      "customLoc": "0",
+      "estimatedHours": "0.5–1",
+      "codeKind": "platform defect",
+      "codeFate": "n/a",
+      "proposal": "Release the fix.",
+      "dependencies": []
+    },
+    {
+      "id": "FK-GAP-020",
+      "title": "AppPort: subscriptions from different connections with the same subscriptionId replaced each other",
+      "category": "missing-capability",
+      "layer": "defect",
+      "components": [
+        "rkendel1/appport packages/server/src/connection.ts"
+      ],
+      "description": "Subscriptions were registered on the shared bus under the client's subscriptionId. Every SSE request uses sub_sse_1, so the second subscriber replaced the first (which then received nothing) and one unsubscribe released another's subscription. Found by FeltKit's events test (only the last of several subscribers received).",
+      "evidence": [
+        "packages/server/test/subscriptions.test.ts 'per connection' failed before: first connection received []",
+        "FeltKit events test: the first subscriber after boot never received"
+      ],
+      "status": "fixed in AppPort (ada9157, local); needs a server release",
+      "owner": "AppPort",
+      "severity": "high",
+      "priority": "P1",
+      "discovered": "2026-11-05",
+      "wanted": "—",
+      "provided": "—",
+      "implementedManually": "—",
+      "workaround": "—",
+      "customLoc": "0",
+      "estimatedHours": "0.5–1",
+      "codeKind": "platform defect",
+      "codeFate": "n/a",
+      "proposal": "Release the fix.",
+      "dependencies": []
+    },
+    {
+      "id": "FK-GAP-021",
+      "title": "@appport/resolver-client pins @appport/sdk 1.4.0 (and the resolver server pins @appport/server 1.1.5)",
+      "category": "missing-integration",
+      "layer": "dependency",
+      "components": [
+        "rkendel1/resolver"
+      ],
+      "description": "FeltKit depends on resolver-client; its exact sdk 1.4.0 pin installs a second AppPort copy in every FeltKit app once FeltKit moves to 1.5, and the resolver server ran the pre-fix subscription path.",
+      "evidence": [
+        "npm ls in feltkit: @appport/resolver-client@0.2.0 → @appport/sdk@1.4.0 → core 1.4.0 / server 1.1.5"
+      ],
+      "status": "fixed in rkendel1/resolver (c61fe14, local; tests 173 passed/9 skipped, unchanged); needs a release",
+      "owner": "Resolver",
+      "severity": "medium",
+      "priority": "P2",
+      "discovered": "2026-11-05",
+      "wanted": "—",
+      "provided": "—",
+      "implementedManually": "—",
+      "workaround": "—",
+      "customLoc": "0",
+      "estimatedHours": "0.5–1",
+      "codeKind": "platform defect",
+      "codeFate": "n/a",
+      "proposal": "Release the fix.",
+      "dependencies": []
     }
   ],
   "accounting": {
@@ -680,7 +802,7 @@
     "method": "cloc 2.00 on each file (tools/measure.mjs); function-level counts by non-blank, non-comment lines of the named exports"
   },
   "roadmap": {
-    "updated": "2026-11-05 (after release)",
+    "updated": "2026-11-05 (round 2 in progress)",
     "criteria": [
       "custom code eliminated (measured)",
       "apps that benefit",
@@ -720,33 +842,56 @@
         ]
       },
       {
-        "name": "Next — small, high leverage",
+        "name": "Round 2 — implemented locally, awaiting push, review and release",
         "items": [
           {
             "gaps": [
-              "FK-GAP-004",
-              "FK-GAP-017"
+              "FK-GAP-019",
+              "FK-GAP-020",
+              "FK-GAP-018"
             ],
-            "change": "FeltKit adopts AppPort sdk 1.5.0 / server 1.2.0 (the fixed subscription path) — prerequisite for scoped events in FeltKit",
+            "change": "AppPort: core portability, per-connection subscriptions, NOT_FOUND decisions",
+            "owner": "AppPort",
+            "state": "local branch claude/remaining-primitives; release first (unblocks FeltKit's AppPort 1.5 adoption)"
+          },
+          {
+            "gaps": [
+              "FK-GAP-021"
+            ],
+            "change": "Resolver on AppPort 1.5",
+            "owner": "Resolver",
+            "state": "local branch claude/appport-1.5"
+          },
+          {
+            "gaps": [
+              "FK-GAP-011",
+              "FK-GAP-018"
+            ],
+            "change": "FeltKit: reconnect on online/visible; NOT_FOUND decisions",
             "owner": "FeltKit",
-            "state": "not started (0.3.16 pins sdk 1.4.0 / server 1.1.5)"
+            "state": "local branch claude/remaining-primitives (mergeable now)"
           },
           {
             "gaps": [
               "FK-GAP-004"
             ],
-            "change": "FeltKit integration of AppPort scoped events (publish from functions, client subscribe, scopes decided by the authorize hook)",
-            "owner": "FeltKit",
-            "state": "unblocked (AppPort released); not started"
+            "change": "Ephemeral scoped events (FeltKit app.event + AppBoundry events@1 + AppPort)",
+            "owner": "FeltKit + AppBoundry + AppPort",
+            "state": "local branches; FeltKit's needs the AppPort release"
           },
           {
             "gaps": [
-              "FK-GAP-011"
+              "FK-GAP-016"
             ],
-            "change": "client reconnect on online/visibilitychange",
-            "owner": "FeltKit client",
-            "state": "not started"
-          },
+            "change": "appport add --help and no-terminal refusal",
+            "owner": "AppPort CLI (in rkendel1/appboundry)",
+            "state": "local branch claude/remaining-primitives"
+          }
+        ]
+      },
+      {
+        "name": "Next — small, high leverage",
+        "items": [
           {
             "gaps": [
               "FK-GAP-001"
@@ -754,14 +899,6 @@
             "change": "optional per-function `resource` declaration so a central policy does not infer resources from argument names",
             "owner": "FeltKit",
             "state": "proposed (from consumer acceptance)"
-          },
-          {
-            "gaps": [
-              "FK-GAP-016"
-            ],
-            "change": "appport add --non-interactive",
-            "owner": "AppPort CLI",
-            "state": "not started"
           }
         ]
       },
