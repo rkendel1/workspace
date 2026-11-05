@@ -1,18 +1,18 @@
 {
   "base": "http://localhost:3000",
-  "at": "2026-11-05T01:30:28.689Z",
+  "at": "2026-11-05T01:48:36.809Z",
   "passed": 16,
   "failed": 0,
   "results": [
     {
       "name": "ada signs in and opens a fresh sample workspace",
       "ok": true,
-      "ms": 1351
+      "ms": 1621
     },
     {
       "name": "ada invites grace (invitation link)",
       "ok": true,
-      "ms": 320,
+      "ms": 596,
       "detail": {
         "link": "http://localhost:3000/?invite=<code>"
       }
@@ -20,97 +20,97 @@
     {
       "name": "grace accepts in an independent session",
       "ok": true,
-      "ms": 527
+      "ms": 516
     },
     {
       "name": "real-time message delivery (no refresh)",
       "ok": true,
-      "ms": 100,
+      "ms": 105,
       "detail": {
-        "latencyMs": 100
+        "latencyMs": 105
       }
     },
     {
       "name": "typing indicator",
       "ok": true,
-      "ms": 789,
+      "ms": 1074,
       "detail": {
-        "latencyMs": 598
+        "latencyMs": 606
       }
     },
     {
       "name": "presence: grace shows active in ada's member list",
       "ok": true,
-      "ms": 235
+      "ms": 269
     },
     {
       "name": "presence: going offline is reflected",
       "ok": true,
-      "ms": 100
+      "ms": 97
     },
     {
       "name": "reactions propagate",
       "ok": true,
-      "ms": 135,
+      "ms": 131,
       "detail": {
-        "latencyMs": 54
+        "latencyMs": 55
       }
     },
     {
       "name": "thread replies propagate",
       "ok": true,
-      "ms": 480,
+      "ms": 514,
       "detail": {
-        "latencyMs": 111
+        "latencyMs": 116
       }
     },
     {
       "name": "unread counts update live",
       "ok": true,
-      "ms": 66,
+      "ms": 60,
       "detail": {
-        "latencyMs": 41,
+        "latencyMs": 40,
         "before": "#random2"
       }
     },
     {
       "name": "membership change: grace is added to a new private channel live",
       "ok": true,
-      "ms": 356,
+      "ms": 346,
       "detail": {
-        "latencyMs": 60
+        "latencyMs": 61
       }
     },
     {
       "name": "agent: mention, plan persisted, reply visible to both sessions",
       "ok": true,
-      "ms": 984,
+      "ms": 831,
       "detail": {
-        "agentRoundTripMs": 192
+        "agentRoundTripMs": 186
       }
     },
     {
       "name": "reconnection: offline session catches up from durable state",
       "ok": true,
-      "ms": 15963,
+      "ms": 15459,
       "detail": {
-        "catchUpAfterReconnectMs": 12846
+        "catchUpAfterReconnectMs": 12345
       }
     },
     {
       "name": "durable recovery: a fresh page load shows the authoritative state",
       "ok": true,
-      "ms": 154
+      "ms": 153
     },
     {
       "name": "side-by-side screenshot of both sessions",
       "ok": true,
-      "ms": 1243
+      "ms": 1309
     },
     {
       "name": "light/dark/mobile screenshots",
       "ok": true,
-      "ms": 2367
+      "ms": 2462
     }
   ]
 }
