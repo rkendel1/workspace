@@ -14,7 +14,7 @@ export const AGENT = { id: "assistant", type: "agent" as const, displayName: "As
 
 /** MP_TARGET=artifact runs the tests against the compiled AppBoundry artifact (multiplayer.app) instead. */
 export const ARTIFACT = process.env.MP_TARGET === "artifact";
-const NO_TENANCY = "MP_TARGET=artifact: AppBoundry hosts have no accounts or tenancy (auth.tenant) yet, so workspaces, memberships and invitations cannot be set up there. Not faked: skipped.";
+const NO_TENANCY = "MP_TARGET=artifact is blocked: AppBoundry hosts have no accounts or tenancy (FK-GAP-013), and `feltkit build --target appboundry` refuses app.agent (the room agent), so no artifact of this app exists. Not faked: skipped.";
 
 /** A test that needs workspaces (FeltKit tenancy). Skipped, with the reason, against the artifact. */
 export function wtest(name: string, fn: () => Promise<void>) {
@@ -53,13 +53,10 @@ export async function joinAs(t: TestApp, workspaceId: string, by: typeof ADA, wh
   return caller;
 }
 
-/** Add the room agent to a workspace the FeltKit way (an agent identity, added directly) and list it in the directory. */
-export async function addAgent(t: TestApp, workspaceId: string, by = ADA) {
+/** Add the room agent to a workspace the FeltKit way (an agent identity, added directly), then agents:add (its profile). */
+export async function addAgent(t: TestApp, workspaceId: string, by: { id: string; displayName?: string } = ADA) {
   await t.tenancy!.addPrincipal(await actor(t, workspaceId, by), AGENT, "agent");
-  await t.as(by, { tenant: workspaceId }).mutation(api.agents.add, {});
-  const agent = t.as(AGENT, { tenant: workspaceId });
-  await agent.mutation(api.me.ensure, {});
-  return agent;
+  await t.as(by as any, { tenant: workspaceId }).mutation(api.agents.add, {});
 }
 
 /** Ada's workspace Acme with Grace invited as member, and Mallory in her own workspace (Evil Corp). */
@@ -89,7 +86,16 @@ export async function serve(t: TestApp) {
     if (workspaceId) await client.switchTenant(workspaceId);
     return client;
   };
-  return { url: server.url, signIn, close: () => server.close() };
+  const anonymous = createClient({ url: server.url, tokens: { get: () => null, set: () => undefined } });
+  /** Share a file the FeltKit way: an upload link from the app, the bytes over HTTP, then attach. */
+  const upload = async (caller: any, channelId: string, name: string, bytes: Uint8Array, contentType = "application/octet-stream") => {
+    const link = await caller.mutation(api.attachments.uploadLink, { channelId, name, contentType });
+    const file = await anonymous.uploadFile(link, bytes, { name, contentType });
+    return { file, attachment: await caller.mutation(api.attachments.attach, { channelId, fileId: file.id }) };
+  };
+  /** Download through a link from attachments:download (no session: the link is the capability). */
+  const download = async (link: { url: string }) => new Uint8Array(await (await fetch(anonymous.fileUrl(link))).arrayBuffer());
+  return { url: server.url, signIn, upload, download, close: () => server.close() };
 }
 
 export async function rejects(p: Promise<unknown>, code: string | string[]) {

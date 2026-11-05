@@ -1,7 +1,7 @@
 import { fail, s } from "@feltdb/feltkit";
 import { agentRequests, app, attachments, messages, participants, reactions, sharedObjects } from "./app.js";
 import { readableChannels, loadChannel, loadWorkspace } from "./_authz.js";
-import { insertMessage, inWorkspace, joinChannel } from "./_ops.js";
+import { insertMessage, inWorkspace, joinChannel, ROOM_AGENT } from "./_ops.js";
 import { mentionedHandles, record } from "./_util.js";
 
 const PAGE = 60;
@@ -116,9 +116,12 @@ export const send = app.mutation({
       if (p.kind === "agent") {
         // A person asking an agent: the agent must be in the conversation to read it. The person,
         // who can see the conversation, brings it in; the agent then works under its own identity.
-        if (participant.kind === "agent") continue; // agents do not trigger agents (no loops)
+        // Only the application's own agent (app.agent "assistant") acts on mentions.
+        if (participant.kind === "agent" || p.principalId !== ROOM_AGENT) continue; // agents do not trigger agents (no loops)
         await joinChannel(ctx, channel.workspaceId, channelId, p.id);
-        await ctx.db.insert(agentRequests, { workspaceId: channel.workspaceId, channelId, messageId: id, agentId: p.id, requestedBy: participant.id, prompt: body, status: "pending", createdAt: now });
+        const requestId = await ctx.db.insert(agentRequests, { workspaceId: channel.workspaceId, channelId, messageId: id, agentId: p.id, requestedBy: participant.id, prompt: body, status: "pending", createdAt: now });
+        // Recorded with this transaction, run by FeltKit after the commit as the agent (feltkit/agents.ts).
+        ctx.afterCommit.agent("assistant", { requestId });
         await record(ctx, channel.workspaceId, participant.id, "agent.requested", `${participant.displayName} asked @${p.handle}: ${body.slice(0, 120)}`, id);
       } else if (!p.persona) {
         ctx.afterCommit.notifications.send({
@@ -178,18 +181,20 @@ export const react = app.mutation({
   },
 });
 
-/** Case-insensitive search over the conversations the caller can read (FK-GAP-006: a scan). */
+/**
+ * Search the conversations the caller can read: every word, case- and accent-insensitive, newest
+ * first (FeltKit's ctx.db.search, FK-GAP-006). One bounded search per readable conversation, so a
+ * conversation the caller cannot read is never searched; tenant-scoped and tracked live by FeltKit.
+ */
 export const search = app.query({
   access: "messages.read",
   args: { workspaceId: s.optional(s.string()), q: s.string({ minLength: 1, maxLength: 200 }) },
   handler: async (ctx, { q }) => {
     const { participant, role } = await loadWorkspace(ctx);
     const readable = new Map((await readableChannels(ctx, participant.id, role)).map((c) => [c.id, c]));
-    const needle = q.trim().toLowerCase();
-    const hits = (await ctx.db.find(messages, {}))
-      .filter((m) => readable.has(m.channelId) && !m.deletedAt && m.text.toLowerCase().includes(needle))
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 50);
+    const found = [];
+    for (const channelId of readable.keys()) found.push(...(await ctx.db.search(messages, { text: q, where: { channelId }, limit: 50 })));
+    const hits = found.filter((m) => !m.deletedAt).sort((a, b) => b.createdAt - a.createdAt).slice(0, 50);
     const items = await present(ctx, hits, participant.id);
     return items.map((m) => {
       const c = readable.get(m.channelId)!;

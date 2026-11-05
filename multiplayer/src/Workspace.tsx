@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { AccountSettings, AuthNotices, InvitationsPanel, TenantSettings, TenantSwitcher, VerifyEmailBanner, useAuth, useFeltKit, useMutation, useQueryState, useTenant } from "@feltdb/feltkit/react";
+import { AccountSettings, AuthNotices, InvitationsPanel, TenantSettings, TenantSwitcher, VerifyEmailBanner, useAuth, useEvent, useFeltKit, useMutation, useQueryState, useTenant } from "@feltdb/feltkit/react";
 import { api } from "../feltkit/_generated/api";
 import { Logo } from "./App";
 import { ThemeToggle } from "./theme";
@@ -7,7 +7,7 @@ import { ago, Avatar, bytes, clock, day, Modal, useNow, type useToasts } from ".
 
 type Toasts = ReturnType<typeof useToasts>;
 type Me = { id: string; displayName: string; handle: string };
-type Member = { participantId: string; handle: string; displayName: string; title: string | null; kind: string; agentType: string | null; persona: boolean; lastSeenAt: number | null; status: string | null; typingIn: string | null; typingUntil: number | null };
+type Member = { participantId: string; handle: string; displayName: string; title: string | null; kind: string; agentType: string | null; persona: boolean; lastSeenAt: number | null; status: string | null };
 type Panel = { kind: "details" } | { kind: "thread"; rootId: string } | { kind: "plan"; id: string } | { kind: "members" } | { kind: "activity" } | { kind: "search"; q: string } | { kind: "inbox" } | null;
 
 const EMOJI = ["👍", "❤️", "😂", "🎉", "🚀", "👀", "✅", "🙏"];
@@ -31,6 +31,7 @@ export function WorkspaceView(props: { workspaceId: string; me: Me; live: boolea
   const [pane, setPane] = useState<"nav" | "chat" | "panel">("chat");
   const [modal, setModal] = useState<null | "channel" | "dm" | "invite" | "addMembers">(null);
   const heartbeat = useMutation(api.presence.heartbeat);
+  const typingIn = useMutation(api.presence.typingIn);
   const now = useNow(5000);
   const skew = useRef(0);
   if (ws.data) skew.current = ws.data.now - Date.now();
@@ -136,7 +137,7 @@ export function WorkspaceView(props: { workspaceId: string; me: Me; live: boolea
         ) : channelId ? (
           <Conversation key={channelId} channelId={channelId} me={me} members={members} now={now + skew.current} toasts={toasts}
             onOpenThread={(rootId) => openPanel({ kind: "thread", rootId })} onOpenPlan={(id) => openPanel({ kind: "plan", id })}
-            onDetails={() => openPanel({ kind: "details" })} onAddMembers={() => setModal("addMembers")} onBack={() => setPane("nav")} onTyping={(typing) => void heartbeat({ workspaceId, status: "active", ...(typing ? { typingIn: channelId } : {}) }).catch(() => undefined)} />
+            onDetails={() => openPanel({ kind: "details" })} onAddMembers={() => setModal("addMembers")} onBack={() => setPane("nav")} onTyping={(typing) => void typingIn({ channelId, typing }).catch(() => undefined)} />
         ) : chans.data ? <Empty title="No conversations" body="Create a channel to get started." /> : <div className="center muted" role="status">Loading…</div>}
       </main>
 
@@ -145,7 +146,7 @@ export function WorkspaceView(props: { workspaceId: string; me: Me; live: boolea
           <PanelView panel={panel} channelId={channelId} workspaceId={workspaceId} me={me} members={members} myRole={ws.data?.myRole ?? "guest"} online={online} toasts={toasts} now={now + skew.current}
             onClose={() => { setPanel(null); setPane("chat"); }} onOpenThread={(rootId) => openPanel({ kind: "thread", rootId })} onOpenPlan={(id) => openPanel({ kind: "plan", id })}
             onOpenChannel={(id, rootId) => { setChannelId(id); if (rootId) openPanel({ kind: "thread", rootId }); else { setPanel(null); setPane("chat"); } }}
-            onTyping={(typing) => channelId && void heartbeat({ workspaceId, status: "active", ...(typing ? { typingIn: channelId } : {}) }).catch(() => undefined)} />
+            onTyping={(typing) => channelId && void typingIn({ channelId, typing }).catch(() => undefined)} />
         </aside>
       )}
 
@@ -265,8 +266,16 @@ function Conversation(props: { channelId: string; me: Me; members: Member[]; now
 
   if (ch.error) return <Empty title="Conversation unavailable" body={ch.error.code === "NOT_FOUND" ? "It doesn't exist, or you're no longer a member." : ch.error.message} />;
   const c = ch.data;
-  const typing = props.members.filter((m) => m.typingIn === channelId && (m.typingUntil ?? 0) > props.now && m.participantId !== me.id);
-  const working = (requests.data ?? []).filter((r) => r.status === "pending" || r.status === "working");
+  // Typing: an ephemeral event for this conversation (app.event + useEvent); each lasts 5 s unless renewed.
+  const [typers, setTypers] = useState<Record<string, { name: string; until: number }>>({});
+  useEvent<{ participantId: string; name: string; typing: boolean }>("conversation.typing", { scope: channelId }, (p) => {
+    if (p.participantId === me.id) return;
+    setTypers((x) => { const next = { ...x }; if (p.typing) next[p.participantId] = { name: p.name, until: Date.now() + 5000 }; else delete next[p.participantId]; return next; });
+  });
+  const [tick, setTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, []);
+  const typing = useMemo(() => Object.values(typers).filter((x) => x.until > Date.now()).map((x) => ({ displayName: x.name })), [typers, tick]);
+  const working = (requests.data ?? []).filter((r) => r.status === "pending");
   const title = !c ? "…" : c.kind === "dm" || c.kind === "group" ? c.members.filter((m) => m.participantId !== me.id).map((m) => m.displayName).join(", ") || me.displayName : c.name;
 
   return (
@@ -343,12 +352,8 @@ function MessageRow({ m, me, grouped, onOpenThread, onOpenPlan, toasts }: { m: M
   const mine = m.author.id === me.id;
   const download = async (a: { id: string; name: string }) => {
     try {
-      const f = await client.query(api.attachments.download, { attachmentId: a.id });
-      const bin = Uint8Array.from(atob(f.base64), (c) => c.charCodeAt(0));
-      const url = URL.createObjectURL(new Blob([bin], { type: f.contentType }));
-      const link = Object.assign(document.createElement("a"), { href: url, download: f.name });
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // A short-lived file link from the app (FeltKit serves the bytes over HTTP; nothing in base64).
+      await openFile(client, a.id);
     } catch (e) { toasts.error(e); }
   };
   if (m.deleted) return <div className={`msg deleted ${grouped ? "grouped" : ""}`}><div className="msg-gutter" /><div className="msg-body"><em className="muted">This message was deleted.</em>{m.replyCount > 0 && onOpenThread && <button className="thread-link" onClick={() => onOpenThread(m.id)}>{m.replyCount} {m.replyCount === 1 ? "reply" : "replies"}</button>}</div></div>;
@@ -428,7 +433,9 @@ function RichText({ text }: { text: string }) {
 
 function Composer({ channelId, rootId, members, placeholder, toasts, onTyping, onSent }: { channelId: string; rootId?: string; members: Member[]; placeholder: string; toasts: Toasts; onTyping: (typing: boolean) => void; onSent?: () => void }) {
   const send = useMutation(api.messages.send);
-  const upload = useMutation(api.attachments.upload);
+  const client = useFeltKit();
+  const uploadLink = useMutation(api.attachments.uploadLink);
+  const attachFile = useMutation(api.attachments.attach);
   const key = `mp:draft:${channelId}:${rootId ?? ""}`;
   const [text, setText] = useState(() => sessionStorage.getItem(key) ?? "");
   const [files, setFiles] = useState<Array<{ id: string; name: string; size: number }>>([]);
@@ -460,8 +467,11 @@ function Composer({ channelId, rootId, members, placeholder, toasts, onTyping, o
     for (const f of Array.from(list ?? [])) {
       if (f.size > 1024 * 1024) { toasts.error(`${f.name} is larger than 1 MB, the file service's limit.`); continue; }
       try {
-        const base64 = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] ?? ""); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
-        const a = await upload({ channelId, name: f.name, contentType: f.type || "application/octet-stream", base64 });
+        // The bytes go over a single-use upload link; then the file is bound to this conversation.
+        const contentType = f.type || "application/octet-stream";
+        const link = await uploadLink({ channelId, name: f.name, contentType });
+        const file = await client.uploadFile(link, f, { name: f.name, contentType });
+        const a = await attachFile({ channelId, fileId: file.id });
         setFiles((x) => [...x, a]);
       } catch (err) { toasts.error(err); }
     }
@@ -579,7 +589,7 @@ function Details(props: { channelId: string; me: Me; members: Member[]; online: 
       <section>
         <h3>Files</h3>
         {(files.data ?? []).length === 0 ? <p className="muted small">No files shared yet.</p> : (
-          <ul className="files">{files.data!.map((f) => <li key={f.id}><button className="link" onClick={() => void client.query(api.attachments.download, { attachmentId: f.id }).then((d) => { const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([Uint8Array.from(atob(d.base64), (x) => x.charCodeAt(0))], { type: d.contentType })), download: d.name }); a.click(); }, props.toasts.error)}>📄 {f.name}</button> <span className="muted small">{bytes(f.size)}</span></li>)}</ul>
+          <ul className="files">{files.data!.map((f) => <li key={f.id}><button className="link" onClick={() => void openFile(client, f.id).catch(props.toasts.error)}>📄 {f.name}</button> <span className="muted small">{bytes(f.size)}</span></li>)}</ul>
         )}
       </section>
       <section>
@@ -724,4 +734,11 @@ function AddMembers({ channelId, members, onClose, toasts }: { channelId: string
       </div>
     </Modal>
   );
+}
+
+/** Download an attachment through a short-lived file link (attachments:download, client.fileUrl). */
+async function openFile(client: ReturnType<typeof useFeltKit>, attachmentId: string) {
+  const link = await client.query(api.attachments.download, { attachmentId });
+  const a = Object.assign(document.createElement("a"), { href: client.fileUrl(link), download: link.name });
+  a.click();
 }

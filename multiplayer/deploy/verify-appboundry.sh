@@ -8,6 +8,16 @@
 #   deploy/verify-appboundry.sh            (from multiplayer/; needs Node 22 and Playwright/Chromium)
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# BLOCKED (FK-GAP-013). Multiplayer now uses FeltKit accounts and tenancy (auth.accounts, auth.tenant)
+# and an application agent (app.agent "assistant"). AppBoundry hosts provide neither accounts nor
+# tenancy, and `feltkit build --target appboundry` refuses app.agent, so there is no artifact to verify.
+# This script is kept for when AppBoundry hosts them; it stops here instead of failing half-way.
+if [[ "${FORCE_BLOCKED:-}" != "1" ]]; then
+  echo "verify-appboundry.sh is blocked by FK-GAP-013: AppBoundry hosts have no accounts/tenancy and the" >&2
+  echo "AppBoundry build refuses app.agent. Multiplayer runs on FeltKit's runtime (feltkit dev / start)." >&2
+  exit 2
+fi
 RUNTIME_VERSION="${APPBOUNDRY_VERSION:-1.9.0}"
 PORT="${PORT:-4100}"
 WORK="$(mktemp -d)"

@@ -193,7 +193,7 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05).",
+      "status": "closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).",
       "codeKind": "platform integration glue (workaround)",
       "resolution": {
         "date": "2026-11-05",
@@ -212,7 +212,8 @@
         "remaining": [
           "Release AppPort (core 1.6.1 + server with ada9157), then FeltKit/AppBoundry, then Multiplayer replaces its presence collection and heartbeat writes with presence events."
         ],
-        "released": "AppPort half published (see FK-GAP-017). Next: FeltKit adopts @appport/sdk 1.5.0 / server 1.2.0 and exposes scoped events; then Multiplayer's presence collection and heartbeat mutation are removed."
+        "released": "AppPort half published (see FK-GAP-017). Next: FeltKit adopts @appport/sdk 1.5.0 / server 1.2.0 and exposes scoped events; then Multiplayer's presence collection and heartbeat mutation are removed.",
+        "consumer": "Multiplayer adopted it: typing is an app.event (conversation.typing, scoped to the conversation, observe-authorized by feltkit({ authorize })) published by presence:typingIn and received with useEvent; the presence record keeps only lastSeenAt/status (who is around must outlast the moment). typingIn/typingUntil fields and their client expiry from stored records are gone. Tests: security.test.ts 'typing events reach only those who can read the conversation' (mutation-checked); e2e 'typing indicator' ~0.6 s."
       }
     },
     {
@@ -242,9 +243,13 @@
       "dependencies": [],
       "severity": "medium",
       "priority": "P2",
-      "status": "implemented — rkendel1/feltkit branch claude/gap-005-006 (82dc40e, pushed; PR pending): queries report keyed equality predicates; change events carry per-record HMAC keys (per-process key, never sent); /api/events withholds other tenants' records; watchQuery re-runs on key match. Limits: remote FeltDB stays per collection; writes outside FeltKit's commit path stay per collection. Tests: live-predicates.test.ts (6).",
+      "status": "implemented — rkendel1/feltkit branch claude/gap-005-006 (82dc40e), merged to FeltKit main: queries report keyed equality predicates; change events carry per-record HMAC keys (per-process key, never sent); /api/events withholds other tenants' records; watchQuery re-runs on key match. Limits: remote FeltDB stays per collection; writes outside FeltKit's commit path stay per collection. Tests: live-predicates.test.ts (6). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).",
       "codeKind": "—",
-      "reuseFinding": "FeltDB already offers predicate-level read bases (db.readBasis(predicates)), which FeltKit uses to fence mutation reads (runtime/data.ts #fence). Predicate-level invalidation should reuse it (a FeltDB 'changed since basis' check, or change events carrying the predicate keys) rather than a new FeltKit tracker. Needs a FeltDB-side decision and rkendel1/flow_db; not started."
+      "reuseFinding": "FeltDB already offers predicate-level read bases (db.readBasis(predicates)), which FeltKit uses to fence mutation reads (runtime/data.ts #fence). Predicate-level invalidation should reuse it (a FeltDB 'changed since basis' check, or change events carrying the predicate keys) rather than a new FeltKit tracker. Needs a FeltDB-side decision and rkendel1/flow_db; not started.",
+      "resolution": {
+        "date": "2026-11-05",
+        "consumer": "Multiplayer adopted it: every equality read in its live queries is on a declared keyed field (ids, s.ref channelId/messageId/participantId, the rootId index, the tenant field), verified from the queries' reads (each collection read appears as collection#key, none whole-collection) in functional.test.ts 'live queries re-run only for writes they can see': a post in #random does not re-run #general's messages.list, a post in #general does. No app code needed beyond the declarations it already had."
+      }
     },
     {
       "id": "FK-GAP-006",
@@ -272,8 +277,12 @@
       "dependencies": [],
       "severity": "low",
       "priority": "P3",
-      "status": "implemented in FeltKit (scan) — branch claude/gap-005-006 (82dc40e): app.collection(..., { search }) + ctx.db.search({ text, where, limit ≤ 100 }), tenant-scoped, live, fenced, works in AppBoundry guests on existing reads; cost linear in the `where` subset (50k cap). A FeltDB text index remains upstream (UPSTREAM-GAPS F23). Tests: search.test.ts (8).",
-      "codeKind": "workaround"
+      "status": "implemented in FeltKit (scan) — branch claude/gap-005-006 (82dc40e): app.collection(..., { search }) + ctx.db.search({ text, where, limit ≤ 100 }), tenant-scoped, live, fenced, works in AppBoundry guests on existing reads; cost linear in the `where` subset (50k cap). A FeltDB text index remains upstream (UPSTREAM-GAPS F23). Tests: search.test.ts (8). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).",
+      "codeKind": "workaround",
+      "resolution": {
+        "date": "2026-11-05",
+        "consumer": "Multiplayer adopted it: messages declares search: ['text']; messages:search runs ctx.db.search once per conversation the caller can read (where: { channelId }, limit 50) and merges newest first, so unreadable conversations are never searched. The app's workspace-wide scan and substring match are gone. Tests: functional/security search tests unchanged and passing."
+      }
     },
     {
       "id": "FK-GAP-007",
@@ -305,7 +314,7 @@
       ],
       "severity": "medium",
       "priority": "P2",
-      "status": "closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration.",
+      "status": "closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).",
       "codeKind": "glue (transfer) + application semantics (binding)",
       "ownershipEvidence": "AppPort Services Files passes only { owner } as resource attributes to the authorizer (src/files/service.ts), not the file's metadata, so no policy can decide by the resource a file belongs to. Owner of that change: AppPort Services; the transfer route (signed download/upload) is FeltKit's.",
       "resolution": {
@@ -320,7 +329,8 @@
           "feltkit test/file-links.test.ts (4): upload->bind->download, membership decides link issuance, unknown/expired/used/wrong-kind/over-limit refused, removed file link 404"
         ],
         "notChanged": "AppPort Services Files still passes only {owner} as resource attributes. Not needed for this outcome: the application authorizes the resource in the function that issues the link. Metadata-based Files authorization remains a possible AppPort Services improvement, not a blocker.",
-        "expectedMultiplayerEffect": "Removes _base64.ts (23 LOC) and the base64/Blob conversions in Workspace.tsx; attachments.upload/download become uploadLink/attach/link. The channel binding (attachments collection, membership checks) stays: it is application semantics."
+        "expectedMultiplayerEffect": "Removes _base64.ts (23 LOC) and the base64/Blob conversions in Workspace.tsx; attachments.upload/download become uploadLink/attach/link. The channel binding (attachments collection, membership checks) stays: it is application semantics.",
+        "consumer": "Multiplayer adopted it: attachments:uploadLink (files.uploadLink with function-fixed metadata { workspaceId, channelId }) → client.uploadFile → attachments:attach (checks owner, metadata, single binding) and attachments:download (files.link) → client.fileUrl. _base64.ts and all base64/Blob conversions are gone. Tests: functional upload/download over HTTP links; security 'unauthorized file access' (links only for readers/members, foreign/used files refused, forged link 404); e2e 'files: upload and download through FeltKit file links'."
       }
     },
     {
@@ -351,8 +361,12 @@
       "dependencies": [],
       "severity": "high",
       "priority": "P1",
-      "status": "implemented — rkendel1/feltkit branch claude/gap-008 (00a2ec6, pushed; PR pending): app.agent(name, { principal, roles, on?, handler }) triggered by ctx.afterCommit.agent or app.event, recorded in the mutation's outbox, run at least once as the agent principal (its own roles, never the caller's) with leases and backoff, writes committed at most once (transaction id from the outbox id), restart recovery, tenant only where the agent is a member. AppBoundry: refused at build (needs a host interface). Tests: agents.test.ts (10).",
-      "codeKind": "platform integration glue (adapter + queue)"
+      "status": "implemented — rkendel1/feltkit branch claude/gap-008 (00a2ec6), merged to FeltKit main: app.agent(name, { principal, roles, on?, handler }) triggered by ctx.afterCommit.agent or app.event, recorded in the mutation's outbox, run at least once as the agent principal (its own roles, never the caller's) with leases and backoff, writes committed at most once (transaction id from the outbox id), restart recovery, tenant only where the agent is a member. AppBoundry: refused at build (needs a host interface). Tests: agents.test.ts (10). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).",
+      "codeKind": "platform integration glue (adapter + queue)",
+      "resolution": {
+        "date": "2026-11-05",
+        "consumer": "Multiplayer adopted it: the room agent is app.agent('assistant') (roles ['agent'], access agents.work), triggered by ctx.afterCommit.agent in messages:send when @assistant (a FeltKit member of the workspace) is mentioned; the deterministic composer moved to feltkit/_compose.ts. Removed: agents:pending/claim/context/respond/failRequest, the 2-minute lease, agent/worker.ts and agent/room-agent.ts (tenant listing/switching loop), the agent's dev user. Note: app.agent cannot opt into retry.sequenceConflicts, so overlapping replies in one conversation are retried with backoff (set to 250 ms). AppBoundry build refuses app.agent (documented; FK-GAP-013 blocks AppBoundry anyway). Tests: functional agent tests via t.runtime.settleAgents(), security 'agent permission escalation', 'overlapping agent runs'; e2e agent round trip ~0.2 s."
+      }
     },
     {
       "id": "FK-GAP-009",

@@ -1,23 +1,23 @@
 {
   "base": "http://localhost:3217",
-  "at": "2026-11-05T18:55:51.491Z",
-  "passed": 20,
+  "at": "2026-11-05T19:33:06.811Z",
+  "passed": 21,
   "failed": 0,
   "results": [
     {
       "name": "sign-in screen (FeltKit SignIn)",
       "ok": true,
-      "ms": 1200
+      "ms": 1123
     },
     {
       "name": "ada signs in (development identity) and opens a fresh sample workspace",
       "ok": true,
-      "ms": 737
+      "ms": 726
     },
     {
       "name": "ada invites grace by e-mail (FeltKit InvitationsPanel); the invitation is e-mailed",
       "ok": true,
-      "ms": 429,
+      "ms": 347,
       "detail": {
         "link": "http://localhost:3217/#feltkit-invitation=<token>"
       }
@@ -25,7 +25,7 @@
     {
       "name": "grace opens the link, signs in with an e-mailed code, and joins (FeltKit AcceptInvitation)",
       "ok": true,
-      "ms": 1651,
+      "ms": 930,
       "detail": {
         "code": "<8 digits from the dev inbox>"
       }
@@ -33,109 +33,117 @@
     {
       "name": "real-time message delivery (no refresh)",
       "ok": true,
-      "ms": 121,
+      "ms": 106,
       "detail": {
-        "latencyMs": 121
+        "latencyMs": 106
       }
     },
     {
       "name": "typing indicator",
       "ok": true,
-      "ms": 814,
+      "ms": 791,
       "detail": {
-        "latencyMs": 624
+        "latencyMs": 599
       }
     },
     {
       "name": "presence: grace shows active in ada's member list",
       "ok": true,
-      "ms": 252
+      "ms": 226
     },
     {
       "name": "presence: going away is reflected",
       "ok": true,
-      "ms": 107
+      "ms": 100
     },
     {
       "name": "reactions propagate",
       "ok": true,
-      "ms": 206,
+      "ms": 136,
       "detail": {
-        "latencyMs": 130
+        "latencyMs": 55
       }
     },
     {
       "name": "thread replies propagate",
       "ok": true,
-      "ms": 519,
+      "ms": 479,
       "detail": {
-        "latencyMs": 136
+        "latencyMs": 113
+      }
+    },
+    {
+      "name": "files: upload and download through FeltKit file links (no base64 through functions)",
+      "ok": true,
+      "ms": 233,
+      "detail": {
+        "url": "http://localhost:3217/api/files/<token>"
       }
     },
     {
       "name": "unread counts update live",
       "ok": true,
-      "ms": 99,
+      "ms": 65,
       "detail": {
-        "latencyMs": 48
+        "latencyMs": 47
       }
     },
     {
       "name": "channel membership: grace is added to a new private channel live",
       "ok": true,
-      "ms": 414,
+      "ms": 342,
       "detail": {
-        "latencyMs": 70
+        "latencyMs": 62
       }
     },
     {
       "name": "agent: mention, plan persisted, reply visible to both sessions",
       "ok": true,
-      "ms": 1011,
+      "ms": 895,
       "detail": {
-        "agentRoundTripMs": 302
+        "agentRoundTripMs": 180
       }
     },
     {
       "name": "reconnection: offline session catches up from durable state",
       "ok": true,
-      "ms": 14459,
+      "ms": 15456,
       "detail": {
-        "catchUpAfterReconnectMs": 11348
+        "catchUpAfterReconnectMs": 12340
       }
     },
     {
       "name": "durable recovery: a fresh page load shows the authoritative state (cookie session survives)",
       "ok": true,
-      "ms": 214
+      "ms": 204
     },
     {
       "name": "side-by-side screenshot of both sessions",
       "ok": true,
-      "ms": 1285
+      "ms": 1231
     },
     {
       "name": "account screen (FeltKit AccountSettings): grace's account and sessions",
       "ok": true,
-      "ms": 218
+      "ms": 227
     },
     {
       "name": "workspaces: create a second one and switch back (FeltKit TenantSwitcher)",
       "ok": true,
-      "ms": 625
+      "ms": 608
     },
     {
       "name": "workspace settings (FeltKit TenantSettings): members, role change, removal takes effect",
       "ok": true,
-      "ms": 1587,
+      "ms": 1440,
       "detail": {
-        "removedMemberNoticedMs": 182
+        "removedMemberNoticedMs": 29
       }
     },
     {
       "name": "light/dark/mobile screenshots",
       "ok": true,
-      "ms": 2406
+      "ms": 2489
     }
   ]
 }

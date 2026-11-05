@@ -86,31 +86,28 @@ test("search finds messages in readable conversations only", async () => {
   } finally { await t.close(); }
 });
 
-test("upload an attachment, send it, download it", async () => {
+test("upload an attachment over a file link, send it, download it over a file link", async () => {
   const { t, ada, grace, general } = await setup();
+  const http = await serve(t);
   try {
     const bytes = new Uint8Array([0, 1, 2, 250, 251, 252, 10, 13]);
-    const base64 = Buffer.from(bytes).toString("base64");
-    const a = await ada.mutation(api.attachments.upload, { channelId: general, name: "data.bin", contentType: "application/octet-stream", base64 });
+    const { attachment: a } = await http.upload(ada, general, "data.bin", bytes);
+    assert.equal(a.size, bytes.length);
     await ada.mutation(api.messages.send, { channelId: general, text: "see file", attachmentIds: [a.id] });
     const [m] = (await grace.query(api.messages.list, { channelId: general })).items;
     assert.equal(m.attachments[0].name, "data.bin");
     const d = await grace.query(api.attachments.download, { attachmentId: a.id });
-    assert.deepEqual([...Buffer.from(d.base64, "base64")], [...bytes], "bytes round-trip exactly");
+    assert.match(d.url, /^\/api\/files\//);
+    assert.deepEqual([...(await http.download(d))], [...bytes], "bytes round-trip exactly, over HTTP");
     assert.equal((await grace.query(api.attachments.list, { channelId: general })).length, 1);
-    // The Files service holds the bytes; message records hold only the reference.
-    if (t.runtime) {
-      const stored = await t.runtime.instance.handle("test").collection("messages").find({});
-      assert.ok(!JSON.stringify(stored).includes(base64));
-    }
-  } finally { await t.close(); }
+  } finally { await http.close(); await t.close(); }
 });
 
 test("add agent, mention it, agent action persists a project plan and posts a reference", async () => {
   const { t, ada, ws } = await setup();
   try {
     // The agent is a FeltKit member of the workspace (role "agent"), added directly as an agent identity.
-    const agent = await addAgent(t, ws);
+    await addAgent(t, ws);
     assert.equal((await t.tenancy!.membership(ws, "assistant"))?.role, "agent");
     const ch = await ada.mutation(api.channels.create, { workspaceId: ws, name: "launch", kind: "public", topic: "Q1 launch" });
     await ada.mutation(api.messages.send, { channelId: ch, text: "Goal: ship the beta by March 14." });
@@ -120,9 +117,8 @@ test("add agent, mention it, agent action persists a project plan and posts a re
     const ask = await ada.mutation(api.messages.send, { channelId: ch, text: "@assistant summarize this discussion and create a project plan." });
     assert.deepEqual((await ada.query(api.agents.requests, { channelId: ch })).map((r: any) => r.status), ["pending"]);
 
-    const { workQueue } = await import("../agent/worker.js");
-    const result = await workQueue(agent);
-    assert.deepEqual(result, { handled: 1, failed: 0, skipped: 0 });
+    // FeltKit runs the app.agent after the commit, as the agent (here: wait for it).
+    await t.runtime.settleAgents();
 
     const [req] = await ada.query(api.agents.requests, { channelId: ch });
     assert.equal(req.status, "done");
@@ -138,7 +134,12 @@ test("add agent, mention it, agent action persists a project plan and posts a re
     assert.equal((await ada.query(api.agents.plans, { workspaceId: ws })).length, 1);
     const log = await ada.query(api.activity.list, { workspaceId: ws });
     assert.ok(log.some((a: any) => a.type === "agent.plan.created"));
-    assert.equal((await agent.query(api.agents.pending)).length, 0, "nothing left to do");
+    // Run as the agent's own principal, recorded in FeltKit's activity log, once.
+    await t.runtime.activity.flush();
+    const runs = (await t.runtime.activity.list()).filter((e: any) => e.name === "agent/assistant");
+    assert.deepEqual(runs.map((e: any) => [e.principal?.id, e.via, e.outcome]), [["assistant", "agent", "success"]]);
+    await t.runtime.runServices();
+    assert.equal((await ada.query(api.messages.thread, { rootId: ask.id })).replies.length, 1, "the services worker does not run it again");
   } finally { await t.close(); }
 });
 
@@ -174,33 +175,54 @@ test("the sample workspace is real, persisted and complete", async () => {
   } finally { await t.close(); }
 });
 
-test("the external room agent lists its workspaces over HTTP and works each one's queue", async () => {
+test("the room agent works in every workspace it is a member of, and in none it was removed from", async () => {
   const { t, ada, ws, general, mallory, malloryWs } = await setup();
-  const http = await serve(t);
   try {
-    // An operator issues the agent its identity (feltkit session create --type agent); admins add it.
-    const issued = await t.runtime.issueSession({ id: "assistant", type: "agent", roles: ["agent"], displayName: "Assistant" }, { kind: "cli", via: "cli" });
-    const owner = await http.signIn("ada", ws);
-    await owner.addMember("assistant", "agent");
-    await ada.mutation(api.agents.add, {});
-    await t.tenancy!.addPrincipal(await actor(t, malloryWs, MALLORY), AGENT, "agent");
-    await mallory.mutation(api.agents.add, {});
+    await addAgent(t, ws);
+    await addAgent(t, malloryWs, MALLORY);
     const evil = (await mallory.query(api.channels.list, {})).find((c: any) => c.name === "general")!.id;
     await ada.mutation(api.messages.send, { channelId: general, text: "@assistant summarize this" });
     await mallory.mutation(api.messages.send, { channelId: evil, text: "@assistant summarize ours" });
-    const { createClient } = await import("@feltdb/feltkit/client");
-    let token: string | null = issued.token;
-    const client = createClient({ url: http.url, tokens: { get: () => token, set: (v) => { token = v; } } });
-    const { workEveryWorkspace } = await import("../agent/worker.js");
-    assert.deepEqual(await workEveryWorkspace(client), { handled: 2, failed: 0, skipped: 0, workspaces: 2 });
-    assert.notEqual(token, issued.token, "switching rotated the session");
+    await t.runtime.settleAgents();
     for (const [who, ch] of [[ada, general], [mallory, evil]] as const) {
       const [top] = (await who.query(api.messages.list, { channelId: ch })).items;
       assert.equal((await who.query(api.messages.thread, { rootId: top.id })).replies[0].author.handle, "assistant");
+      assert.deepEqual((await who.query(api.agents.requests, { channelId: ch })).map((r: any) => r.status), ["done"]);
     }
-    // Removed from Acme, the agent no longer lists or works it.
-    await owner.removeMember("assistant");
-    await ada.mutation(api.messages.send, { channelId: general, text: "@assistant again?" });
-    assert.deepEqual(await workEveryWorkspace(client), { handled: 0, failed: 0, skipped: 0, workspaces: 1 });
+    // Removed from Acme (FeltKit): @assistant is no longer a mention there, so nothing is asked of it.
+    await t.tenancy!.remove(await actor(t, ws, ADA), AGENT.id);
+    const again = await ada.mutation(api.messages.send, { channelId: general, text: "@assistant again?" });
+    await t.runtime.settleAgents();
+    assert.equal((await ada.query(api.agents.requests, { channelId: general })).length, 1);
+    assert.equal((await ada.query(api.messages.thread, { rootId: again.id })).replies.length, 0);
+  } finally { await t.close(); }
+});
+
+test("live queries re-run only for writes they can see (predicates on declared fields, FK-GAP-005)", async () => {
+  const { t, ada, ws, general } = await setup();
+  const http = await serve(t);
+  try {
+    const random = (await ada.query(api.channels.list, {})).find((c: any) => c.name === "random")!.id;
+    const grace = await http.signIn("grace", ws);
+    // Every read of these queries is an equality on a declared field (id, reference, index, tenant),
+    // so FeltKit records keyed predicates for each collection, not whole-collection reads.
+    for (const [fn, args] of [[api.messages.list, { channelId: general }], [api.channels.get, { channelId: general }], [api.attachments.list, { channelId: general }], [api.agents.requests, { channelId: general }]] as const) {
+      const { reads } = await grace.queryWithReads(fn as any, args as any);
+      const names = reads.filter((r) => !r.includes("#"));
+      for (const name of names) assert.ok(reads.some((r) => r.startsWith(`${name}#`)), `${fn.name} reads ${name} by a keyed predicate`);
+    }
+    let runs = 0;
+    let last: any = null;
+    const off = grace.watchQuery(api.messages.list, { channelId: general }, { next: (v) => { runs++; last = v; } });
+    const settle = async (pred: () => boolean) => { for (let i = 0; i < 50 && !pred(); i++) await new Promise((r) => setTimeout(r, 50)); await new Promise((r) => setTimeout(r, 300)); };
+    await settle(() => runs > 0);
+    const before = runs;
+    await ada.mutation(api.messages.send, { channelId: random, text: "elsewhere" });
+    await settle(() => false);
+    assert.equal(runs, before, "a post in #random does not re-run #general's messages");
+    await ada.mutation(api.messages.send, { channelId: general, text: "here" });
+    await settle(() => last?.items.some((m: any) => m.text === "here"));
+    assert.ok(runs > before && last.items.some((m: any) => m.text === "here"), "a post in #general does");
+    off();
   } finally { await http.close(); await t.close(); }
 });

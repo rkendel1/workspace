@@ -3,7 +3,7 @@
  *
  * Deterministic by default: it extracts decisions, action items with owners and dates, risks and
  * open questions from what people actually wrote, and cites the messages it used. Nothing is
- * invented. A model can be put behind the same Composer interface later (see agent/README.md);
+ * invented. A model can be put behind the same Composer interface later;
  * the application does not depend on one.
  */
 export interface ContextMessage { id: string; author: string; handle: string; authorKind: string; text: string; createdAt: number }

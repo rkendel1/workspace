@@ -48,8 +48,8 @@ const MIN_ROLE: Record<string, WorkspaceRole> = {
 };
 /** Mutations on a conversation that a caller who has not joined it may make. */
 const NON_MEMBER_WRITES = new Set(["channels:join", "channels:markRead", "channels:leave", "messages:remove"]);
-/** Agent queue functions: only the agent a request was made to may work it. */
-const AGENT_WORK = new Set(["agents:claim", "agents:context", "agents:respond", "agents:failRequest"]);
+/** The room agent's run (app.agent, as the agent's principal): only the agent a request was made to works it. */
+const AGENT_WORK = new Set(["agent/assistant"]);
 
 const hidden = (): never => fail("NOT_FOUND", "Not found.");
 
@@ -62,7 +62,8 @@ type Target = { channelId?: string; agentId?: string };
 async function target(r: AuthorizeRequest): Promise<Target | null> {
   const { args, db } = r;
   const str = (k: string) => (typeof args[k] === "string" ? (args[k] as string) : undefined);
-  const channelArg = str("channelId") ?? str("typingIn");
+  // An event subscription (kind "observe") names its conversation as its scope.
+  const channelArg = str("channelId") ?? (r.kind === "observe" ? str("scope") : undefined);
   if (channelArg) { const c = await db.get(channels, channelArg); return c ? { channelId: c.id } : null; }
   for (const k of ["rootId", "messageId"]) {
     if (str(k)) { const m = await db.get(messages, str(k)!); return m ? { channelId: m.channelId } : null; }
@@ -76,7 +77,6 @@ async function target(r: AuthorizeRequest): Promise<Target | null> {
 export const authorize: AuthorizeHook = async (r) => {
   if (UNSCOPED.has(r.function)) return true;
   if (!r.principal) return { allowed: false, code: "UNAUTHORIZED" };
-  if (r.function === "agents:pending") return true; // the caller's own queue in the session's workspace (none: empty)
   // The session's workspace, from FeltKit's live membership. None: not a member (or no longer).
   const tenant = r.principal.tenant ?? hidden();
   // A workspaceId argument is never trusted: it must be the session's own workspace.
@@ -89,7 +89,8 @@ export const authorize: AuthorizeHook = async (r) => {
   const t = (await target(r)) ?? hidden();
   if (AGENT_WORK.has(r.function) && t.agentId !== me.id) hidden();
   if (!t.channelId) return true;
-  const channel = (await r.db.get(channels, t.channelId))!;
+  const channel = await r.db.get(channels, t.channelId);
+  if (!channel || channel.workspaceId !== tenant.id) return hidden();
   const [member] = await r.db.find(channelMembers, { channelId: channel.id, participantId: me.id });
   // Public channels are readable by members of the workspace except guests and agents, who see only
   // conversations they were added to. Private channels, DMs and groups: their members only.

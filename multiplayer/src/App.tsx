@@ -65,7 +65,7 @@ function Onboarding({ onSeeding, toasts }: { onSeeding: (on: boolean) => void; t
     onSeeding(true);
     try {
       await client.createTenant("Northwind Labs");
-      // The room agent joins as a FeltKit member (an agent identity: a dev user here, an operator-issued session in production).
+      // The room agent (app.agent "assistant", an identity FeltKit knows) joins as a FeltKit member with the role "agent".
       await client.addMember("assistant", "agent").catch((e) => toasts.error(`@assistant could not be added: ${e.message}`));
       await client.mutation(api.me.ensure, {});
       await client.mutation(api.demo.seed, {});

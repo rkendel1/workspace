@@ -30,8 +30,8 @@ export const app = feltkit({
     admin: [...PERSON, "tenant.members.manage"],
     member: PERSON,
     guest: PERSON,
-    // A room agent. It reads only channels it was added to and writes only through agent.*
-    // capabilities and messages.write; the channel policy in feltkit/_authz.ts applies to it too.
+    // The room agent (app.agent "assistant", feltkit/agents.ts): it runs with this role and, in a
+    // workspace it is a member of, its membership role "agent"; the channel policy applies to it too.
     agent: ["agents.work", "messages.read", "messages.write", "plans.read", "plans.write", "presence.write", "notifications.send"],
     // Operating the deployment (Studio, credentials, jobs). Not a workspace role.
     operator: ["intelligence.*", "credential.*", "configuration.*", "apikeys.*", "webhooks.*", "jobs.*", "schedules.*", "feltkit.operations.*"],
@@ -47,9 +47,6 @@ export const app = feltkit({
       { id: "ada", name: "Ada Lovelace", roles: ["person", "operator"] },
       { id: "grace", name: "Grace Hopper", roles: ["person"] },
       { id: "alan", name: "Alan Turing", roles: ["person"] },
-      // The room agent's identity in development, so an owner can add it to a workspace (an operator
-      // issues it a session in production: feltkit session create --id assistant --type agent --role agent).
-      { id: "assistant", name: "Assistant", type: "agent", roles: ["agent"] },
     ],
   },
   services: {
@@ -128,7 +125,7 @@ export const messages = app.collection("messages", {
   createdAt: s.number(),
   editedAt: s.optional(s.number()),
   deletedAt: s.optional(s.number()),
-}, { ...WS, indexes: [{ fields: ["channelId", "seq"] }, { fields: ["rootId"] }, { fields: ["workspaceId"] }] });
+}, { ...WS, indexes: [{ fields: ["channelId", "seq"] }, { fields: ["rootId"] }, { fields: ["workspaceId"] }], search: ["text"] });
 
 export const reactions = app.collection("reactions", {
   workspaceId: s.string(),
@@ -162,13 +159,23 @@ export const presence = app.collection("presence", {
   participantId: s.ref(participants),
   lastSeenAt: s.number(),
   status: s.enum(["active", "away"]),
-  typingIn: s.optional(s.string()),
-  typingUntil: s.optional(s.number()),
 }, { ...WS, unique: [["workspaceId", "participantId"]] });
+
+/**
+ * Someone is typing in a conversation: an ephemeral event (never stored), scoped to the
+ * conversation; observing it needs the right to read that conversation (feltkit/_authz.ts).
+ */
+export const typing = app.event("conversation.typing", {
+  payload: s.object({ participantId: s.string(), name: s.string(), typing: s.boolean() }),
+  access: "messages.read",
+});
 
 // ── Agents and the work they produce ────────────────────────────────────────
 
-/** A person asked an agent to do something. The agent works its queue under its own identity. */
+/**
+ * A person asked the room agent to do something: what, by whom, and how it went (the UI shows it).
+ * The run itself (queue, lease, retries) is FeltKit's (`app.agent`, feltkit/agents.ts).
+ */
 export const agentRequests = app.collection("agentRequests", {
   workspaceId: s.string(),
   channelId: s.ref(channels),
@@ -176,9 +183,8 @@ export const agentRequests = app.collection("agentRequests", {
   agentId: s.ref(participants),
   requestedBy: s.ref(participants),
   prompt: s.string({ maxLength: 8000 }),
-  status: s.enum(["pending", "working", "done", "failed"]),
+  status: s.enum(["pending", "done", "failed"]),
   createdAt: s.number(),
-  claimedAt: s.optional(s.number()),
   finishedAt: s.optional(s.number()),
   replyId: s.optional(s.string()),
   sharedObjectId: s.optional(s.string()),

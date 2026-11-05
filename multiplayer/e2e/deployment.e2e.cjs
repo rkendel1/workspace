@@ -5,6 +5,13 @@
  *
  *   BASE=http://127.0.0.1:4100 ADA_TOKEN=… GRACE_TOKEN=… node e2e/deployment.e2e.cjs
  */
+// BLOCKED (FK-GAP-013): this checked the AppBoundry artifact with operator-issued sessions. Multiplayer
+// now needs FeltKit accounts and tenancy and an app.agent, which AppBoundry hosts do not provide (the
+// AppBoundry build refuses app.agent), so there is no artifact to check. Kept for when they do.
+if (process.env.FORCE_BLOCKED !== "1") {
+  console.error("deployment.e2e.cjs is blocked by FK-GAP-013 (no accounts/tenancy on AppBoundry; app.agent refused by the AppBoundry build).");
+  process.exit(2);
+}
 const { chromium } = require("playwright");
 const fs = require("node:fs");
 const path = require("node:path");

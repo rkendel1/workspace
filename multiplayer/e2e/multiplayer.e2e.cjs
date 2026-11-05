@@ -1,18 +1,18 @@
 /**
  * Two independent browser sessions (separate contexts: separate cookies, sessions) against a running
- * Multiplayer dev server and room-agent process, plus a phone-sized session. Verifies FeltKit's
+ * Multiplayer dev server (the room agent is a FeltKit app.agent inside it), plus a phone-sized session. Verifies FeltKit's
  * sign-in (development identity, and an e-mailed sign-in code for a real account), workspaces
  * (create, switch), invitations (invite by e-mail, accept), workspace settings and members (role,
  * removal), the account screen, and Multiplayer's own real-time behaviour: delivery, typing,
  * presence, reactions, threads, unread counts, channel membership, the agent action, reconnection
  * and durable recovery. Writes screenshots and evidence.json.
  *
- * By default it starts `feltkit dev` (fresh state) and the room agent itself, and reads the
+ * By default it starts `feltkit dev` (fresh state) itself, and reads the
  * development inbox (e-mail is printed to the dev server's stdout: "✉ <to>: <subject>" and the text):
  *
  *   SHOTS=../screenshots/phase2-multiplayer node e2e/multiplayer.e2e.cjs
  *
- * Against servers you started yourself (then DEV_LOG must name the file the dev server writes to):
+ * Against a server you started yourself (then DEV_LOG must name the file the dev server writes to):
  *
  *   BASE=http://localhost:3000 DEV_LOG=/tmp/dev.log node e2e/multiplayer.e2e.cjs
  */
@@ -76,8 +76,6 @@ async function waitFor(url, timeout = 60000) {
     const state = fs.mkdtempSync(path.join(os.tmpdir(), "mp-e2e-"));
     start("npx", ["feltkit", "dev", "--port", String(PORT)], { FELTKIT_STATE_DIR: state }, (s) => { devOut += s; });
     await waitFor(`${BASE}/api/session`);
-    // The room agent: its own process and identity (the "assistant" dev user of type agent).
-    start("npx", ["tsx", "agent/room-agent.ts"], { MULTIPLAYER_URL: BASE, ROOM_AGENT_DEV: "1", ROOM_AGENT_INTERVAL_MS: "2000" }, (s) => process.env.VERBOSE && process.stdout.write(`[agent] ${s}`));
   }
   const browser = await chromium.launch();
   const mk = async (who, opts = {}) => {
@@ -192,6 +190,21 @@ async function waitFor(url, timeout = 60000) {
     await ada.getByRole("button", { name: "Close panel" }).click();
     await grace.getByRole("button", { name: "Close panel" }).click();
     return { latencyMs: ms };
+  });
+
+  await check("files: upload and download through FeltKit file links (no base64 through functions)", async () => {
+    const body = `Launch checklist ${stamp}\n`;
+    await ada.locator('input[type="file"]').first().setInputFiles({ name: `checklist-${stamp}.txt`, mimeType: "text/plain", buffer: Buffer.from(body) });
+    await ada.getByText(`📎 checklist-${stamp}.txt`).waitFor();
+    await adaBox.fill(`The checklist (${stamp})`);
+    await adaBox.press("Enter");
+    const chip = grace.getByRole("button", { name: new RegExp(`Download checklist-${stamp}\\.txt`) });
+    await chip.waitFor({ timeout: 5000 });
+    const [download] = await Promise.all([grace.waitForEvent("download"), chip.click()]);
+    const got = fs.readFileSync(await download.path(), "utf8");
+    if (got !== body) throw new Error(`downloaded ${JSON.stringify(got)}`);
+    if (!/\/api\/files\//.test(download.url())) throw new Error(`not a file link: ${download.url()}`);
+    return { url: download.url().replace(/files\/.*/, "files/<token>") };
   });
 
   await check("unread counts update live", async () => {

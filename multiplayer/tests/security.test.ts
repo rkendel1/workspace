@@ -74,7 +74,7 @@ test("unauthorized channel access: private channels are invisible to non-members
     await rejects(grace.query(api.messages.list, { channelId: priv }), "NOT_FOUND");
     await rejects(grace.query(api.channels.get, { channelId: priv }), "NOT_FOUND");
     await rejects(grace.mutation(api.channels.join, { channelId: priv }), "NOT_FOUND");
-    await rejects(grace.mutation(api.presence.heartbeat, { workspaceId: ws, status: "active", typingIn: priv }), "NOT_FOUND");
+    await rejects(grace.mutation(api.presence.typingIn, { channelId: priv, typing: true }), "NOT_FOUND");
     const graceId = (await grace.query(api.me.get))!.participant.id;
     await ada.mutation(api.channels.addMembers, { channelId: priv, participantIds: [graceId] });
     assert.equal((await grace.query(api.messages.list, { channelId: priv })).items[0].text, "confidential");
@@ -193,78 +193,97 @@ test("a role change takes effect on the next call", async () => {
 
 test("unauthorized file access", async () => {
   const { t, ada, grace, mallory, ws } = await setup();
+  const http = await serve(t);
   try {
     const priv = await ada.mutation(api.channels.create, { workspaceId: ws, name: "files", kind: "private" });
-    const a = await ada.mutation(api.attachments.upload, { channelId: priv, name: "secret.txt", contentType: "text/plain", base64: Buffer.from("top secret").toString("base64") });
+    const general = (await ada.query(api.channels.list, { workspaceId: ws })).find((c: any) => c.name === "general")!.id;
+    const { file, attachment: a } = await http.upload(ada, priv, "secret.txt", new TextEncoder().encode("top secret"), "text/plain");
     await ada.mutation(api.messages.send, { channelId: priv, text: "file", attachmentIds: [a.id] });
+    // Download links are issued only to readers of the conversation.
     await rejects(grace.query(api.attachments.download, { attachmentId: a.id }), "NOT_FOUND");
     await rejects(mallory.query(api.attachments.download, { attachmentId: a.id }), "NOT_FOUND");
     await rejects(mallory.query(api.attachments.list, { channelId: priv }), "NOT_FOUND");
+    // Upload links only for conversations the caller is in.
+    await rejects(grace.mutation(api.attachments.uploadLink, { channelId: priv, name: "x" }), "NOT_FOUND");
+    await rejects(mallory.mutation(api.attachments.uploadLink, { channelId: general, name: "x" }), "NOT_FOUND");
+    // A file is bound only by its uploader, only to the conversation its link was issued for, and once.
+    await rejects(grace.mutation(api.attachments.attach, { channelId: general, fileId: file.id }), "NOT_FOUND");
+    await rejects(ada.mutation(api.attachments.attach, { channelId: general, fileId: file.id }), "NOT_FOUND");
+    await rejects(ada.mutation(api.attachments.attach, { channelId: priv, fileId: file.id }), "NOT_FOUND");
+    const evil = (await mallory.query(api.channels.list, {})).find((c: any) => c.name === "general")!.id;
+    const theirs = await http.upload(mallory, evil, "x.txt", new TextEncoder().encode("x"));
+    await rejects(ada.mutation(api.attachments.attach, { channelId: general, fileId: theirs.file.id }), "NOT_FOUND");
     // An attachment cannot be re-attached by someone else, or into another conversation.
-    const general = (await ada.query(api.channels.list, { workspaceId: ws })).find((c: any) => c.name === "general")!.id;
     await rejects(grace.mutation(api.messages.send, { channelId: general, text: "steal", attachmentIds: [a.id] }), "NOT_FOUND");
     await rejects(ada.mutation(api.messages.send, { channelId: general, text: "move", attachmentIds: [a.id] }), "NOT_FOUND");
-  } finally { await t.close(); }
+    // A forged or used link is refused by FeltKit.
+    assert.equal((await fetch(`${http.url}/api/files/forged`)).status, 404);
+  } finally { await http.close(); await t.close(); }
 });
 
 test("agent permission escalation is refused at every layer", async () => {
   const { t, ada, grace, ws, general } = await setup();
   try {
-    // Not a member of the workspace yet: no workspace, cannot read anything.
-    const outside = t.as(AGENT, { tenant: ws });
-    await outside.mutation(api.me.ensure, {});
-    await rejects(outside.query(api.messages.list, { channelId: general }), "NOT_FOUND");
-    assert.deepEqual(await outside.query(api.agents.pending), []);
-    const agent = await addAgent(t, ws);
-    // Role layer: agents cannot call people's functions at all.
+    // Not a FeltKit member yet: it has a profile, but @assistant is not a mention here; nothing is asked of it.
+    await ada.mutation(api.agents.add, {});
+    const early = await ada.mutation(api.messages.send, { channelId: general, text: "@assistant are you there?" });
+    await t.runtime.settleAgents();
+    assert.deepEqual(await ada.query(api.agents.requests, { channelId: general }), []);
+    assert.equal((await ada.query(api.messages.thread, { rootId: early.id })).replies.length, 0);
+    await addAgent(t, ws);
+    const agent = t.as(AGENT, { tenant: ws });
+    // Role layer: the agent's principal cannot call people's functions at all.
     await rejects(agent.mutation(api.channels.create, { name: "x", kind: "public" }), "FORBIDDEN");
     await rejects(agent.mutation(api.agents.add, {}), "FORBIDDEN");
     await rejects(agent.query(api.attachments.list, { channelId: general }), "FORBIDDEN");
     await rejects(agent.mutation(api.demo.seed, {}), "FORBIDDEN");
-    // FeltKit's layer: an agent member cannot give roles above its own, and people never join
-    // directly (only by invitation). (The routes also require tenant.members.manage, which "agent" lacks.)
+    // FeltKit's layer: an agent member cannot give roles above its own; people never join directly.
     await rejects(t.tenancy!.addPrincipal(await actor(t, ws, AGENT), { id: "rogue", type: "agent" }, "admin"), "FORBIDDEN");
     await rejects(t.tenancy!.addPrincipal(await actor(t, ws, ADA), { id: "mallory", type: "user" }, "member"), "FORBIDDEN");
-    // Channel layer: an agent does not see public channels it was not brought into.
+    // Channel layer: it does not see public channels it was not brought into.
     await rejects(agent.query(api.messages.list, { channelId: general }), "NOT_FOUND");
-    await rejects(agent.mutation(api.messages.send, { channelId: general, text: "hi" }), "NOT_FOUND");
-    // A private conversation it is mentioned in from outside does not open up.
+    // Nobody runs the agent by name: only a committed mention triggers it.
+    await assert.rejects(ada.mutation({ name: "agent/assistant" } as any, { requestId: "x" }));
+    // A private conversation does not open up to it through someone outside it.
     const priv = await ada.mutation(api.channels.create, { workspaceId: ws, name: "board", kind: "private" });
     await ada.mutation(api.messages.send, { channelId: priv, text: "confidential board notes" });
     await rejects(grace.mutation(api.messages.send, { channelId: priv, text: "@assistant summarize" }), "NOT_FOUND");
-    // Mentioned in #general by a member, the agent can work that request only.
-    await ada.mutation(api.messages.send, { channelId: general, text: "@assistant summarize this" });
-    const [req] = await agent.query(api.agents.pending);
-    const ctx = await (await agent.mutation(api.agents.claim, { requestId: req.id }), agent.query(api.agents.context, { requestId: req.id }));
-    assert.ok(!JSON.stringify(ctx).includes("confidential"));
+    // Mentioned in #general, it answers from #general only, as itself.
+    const ask = await grace.mutation(api.messages.send, { channelId: general, text: "@assistant summarize this" });
+    await t.runtime.settleAgents();
+    const [reply] = (await ada.query(api.messages.thread, { rootId: ask.id })).replies;
+    assert.equal(reply.author.handle, "assistant");
+    assert.ok(!reply.text.includes("confidential"));
     await rejects(agent.query(api.messages.list, { channelId: priv }), "NOT_FOUND");
-    // A person cannot work the agent's queue or impersonate its reply.
-    await rejects(ada.mutation(api.agents.respond, { requestId: req.id, text: "fake" }), "FORBIDDEN");
-    // Another agent, even a member of the workspace, cannot touch this agent's requests.
+    // Another agent identity, even a member, is not the room agent: mentioning it triggers nothing.
     const ROGUE = { id: "rogue-bot", type: "agent" as const, roles: ["agent"] };
     await t.tenancy!.addPrincipal(await actor(t, ws, ADA), ROGUE, "agent");
-    const rogue = t.as(ROGUE, { tenant: ws });
-    await rogue.mutation(api.me.ensure, {});
-    await rejects(rogue.mutation(api.agents.respond, { requestId: req.id, text: "fake" }), "NOT_FOUND");
-    await rejects(rogue.query(api.agents.context, { requestId: req.id }), "NOT_FOUND");
-    // Removed from the workspace, the agent's next call has no workspace: its queue is gone.
-    await t.tenancy!.remove(await actor(t, ws, ADA), AGENT.id);
-    await rejects(agent.query(api.agents.context, { requestId: req.id }), "NOT_FOUND");
-    assert.deepEqual(await agent.query(api.agents.pending), []);
+    await t.as(ROGUE, { tenant: ws }).mutation(api.me.ensure, {});
+    await ada.mutation(api.messages.send, { channelId: general, text: "@rogue-bot do something" });
+    await t.runtime.settleAgents();
+    assert.equal((await ada.query(api.agents.requests, { channelId: general })).length, 1);
   } finally { await t.close(); }
 });
 
-test("two workers racing for one request: exactly one answers", async () => {
-  const { t, ada, ws, general } = await setup();
+test("overlapping agent runs: each mention is answered exactly once", async () => {
+  const { t, ada, grace, ws, general } = await setup();
   try {
-    const agent = await addAgent(t, ws);
-    await ada.mutation(api.messages.send, { channelId: general, text: "@assistant summarize" });
-    const { workQueue } = await import("../agent/worker.js");
-    const [a, b] = await Promise.all([workQueue(agent), workQueue(t.as(AGENT, { tenant: ws }))]);
-    assert.equal(a.handled + b.handled, 1);
-    const top = (await ada.query(api.messages.list, { channelId: general })).items;
-    const th = await ada.query(api.messages.thread, { rootId: top[0].id });
-    assert.equal(th.replies.filter((r: any) => r.author.handle === "assistant").length, 1);
+    await addAgent(t, ws);
+    // Three mentions committed back to back: their runs start at once and overlap.
+    const asks = [];
+    for (const [who, n] of [[ada, "one"], [grace, "two"], [ada, "three"]] as const) asks.push(await who.mutation(api.messages.send, { channelId: general, text: `@assistant summarize ${n}` }));
+    // A run that lost the conversation's sequence to another is retried after a short backoff.
+    for (let i = 0; i < 40; i++) {
+      await t.runtime.settleAgents();
+      await t.runtime.runServices();
+      if ((await ada.query(api.agents.requests, { channelId: general })).every((r: any) => r.status !== "pending")) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    for (const ask of asks) {
+      const replies = (await ada.query(api.messages.thread, { rootId: ask.id })).replies;
+      assert.equal(replies.filter((r: any) => r.author.handle === "assistant").length, 1);
+    }
+    assert.deepEqual((await ada.query(api.agents.requests, { channelId: general })).map((r: any) => r.status), ["done", "done", "done"]);
   } finally { await t.close(); }
 });
 
@@ -284,4 +303,32 @@ test("a removed member is no longer in the directory: no mention, no notificatio
     const priv = await ada.mutation(api.channels.create, { name: "after", kind: "private" });
     await rejects(ada.mutation(api.channels.addMembers, { channelId: priv, participantIds: [graceId] }), "NOT_FOUND");
   } finally { await t.close(); }
+});
+
+test("typing events (app.event) reach only those who can read the conversation", async () => {
+  const { t, ada, ws, general } = await setup();
+  const http = await serve(t);
+  try {
+    const priv = await ada.mutation(api.channels.create, { name: "quiet", kind: "private" });
+    const grace = await http.signIn("grace", ws);
+    // Grace listens to the private conversation (she cannot read it) and to #general (she can).
+    const secret: any[] = [];
+    const got: any[] = [];
+    const offSecret = grace.subscribe("conversation.typing", { scope: priv }, (p) => secret.push(p));
+    const off = grace.subscribe("conversation.typing", { scope: general }, (p) => got.push(p));
+    for (let i = 0; i < 50 && !got.length; i++) {
+      await ada.mutation(api.presence.typingIn, { channelId: priv, typing: true });
+      await ada.mutation(api.presence.typingIn, { channelId: general, typing: true });
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    for (let i = 0; i < 5; i++) {
+      await ada.mutation(api.presence.typingIn, { channelId: priv, typing: true });
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    offSecret();
+    assert.deepEqual(secret, [], "nothing from a conversation she cannot read");
+    off();
+    assert.equal(got[0]?.name, "Ada Lovelace");
+    assert.equal(got[0]?.typing, true);
+  } finally { await http.close(); await t.close(); }
 });

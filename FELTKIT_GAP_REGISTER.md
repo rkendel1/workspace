@@ -17,11 +17,11 @@ Classifications: `missing-capability`, `missing-integration`, `missing-extension
 | [FK-GAP-001](#fk-gap-001) | No application-supplied, input-aware authorization hook in FeltKit | missing-extension-point | hook | high | P1 | FeltKit (exposes AppPort's existing Authorizer composition); AppPort unchanged | closed — released in @feltdb/feltkit 0.3.16; adopted by Multiplayer (workaround removed) |
 | [FK-GAP-002](#fk-gap-002) | AuthBoundry has no resource-level evaluation, and FeltKit has no AuthBoundry adapter | missing-capability | integration | medium | P2 | AuthBoundry (evaluation); FeltKit (adapter) | superseded (2026-11-05 decision) — the wanted outcome (tenant membership and per-resource decisions on the server) is delivered natively by FeltKit (auth.tenant, tenant-scoped collections, the authorize hook; PR #65). The proposed AuthBoundry adapter would make FeltKit depend at runtime on a hosted AuthBoundry service, which the Phase 2 constraints rule out ("FeltKit must remain self-contained"). Delegation for agents acting for a person moves to the agent workstream (AuthBoundry contract implemented in FeltKit, FELTKIT_AUTH_AGENT_STACK_AUDIT.md §5.3). AuthBoundry evaluating `resource` in enforce() remains AuthBoundry's own item. |
 | [FK-GAP-003](#fk-gap-003) | No tenancy / membership primitive | missing-capability | primitive | medium | P2 | AuthBoundry (membership as delegation), with FeltKit integration through FK-GAP-001/002 — not a FeltKit membership store | closed in FeltKit — tenancy primitive (auth.tenant: tenants, memberships, invitations, switching, tenant-scoped collections, typed claims), merged in rkendel1/feltkit PR #65; merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration. |
-| [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events) | closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). |
-| [FK-GAP-005](#fk-gap-005) | Live-query invalidation is per collection, not per query predicate | missing-capability | primitive | medium | P2 | FeltKit (change feed); FeltDB (F7 change listener naming keys) | implemented — rkendel1/feltkit branch claude/gap-005-006 (82dc40e, pushed; PR pending): queries report keyed equality predicates; change events carry per-record HMAC keys (per-process key, never sent); /api/events withholds other tenants' records; watchQuery re-runs on key match. Limits: remote FeltDB stays per collection; writes outside FeltKit's commit path stay per collection. Tests: live-predicates.test.ts (6). |
-| [FK-GAP-006](#fk-gap-006) | No text search / contains operator in ctx.db.query | missing-capability | primitive | low | P3 | FeltDB (index), FeltKit (exposure) | implemented in FeltKit (scan) — branch claude/gap-005-006 (82dc40e): app.collection(..., { search }) + ctx.db.search({ text, where, limit ≤ 100 }), tenant-scoped, live, fenced, works in AppBoundry guests on existing reads; cost linear in the `where` subset (50k cap). A FeltDB text index remains upstream (UPSTREAM-GAPS F23). Tests: search.test.ts (8). |
-| [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration. |
-| [FK-GAP-008](#fk-gap-008) | No hosted, event-triggered execution for application agents | missing-capability | primitive | high | P1 | FeltKit + AppBoundry (execution); FeltDB agent state | implemented — rkendel1/feltkit branch claude/gap-008 (00a2ec6, pushed; PR pending): app.agent(name, { principal, roles, on?, handler }) triggered by ctx.afterCommit.agent or app.event, recorded in the mutation's outbox, run at least once as the agent principal (its own roles, never the caller's) with leases and backoff, writes committed at most once (transaction id from the outbox id), restart recovery, tenant only where the agent is a member. AppBoundry: refused at build (needs a host interface). Tests: agents.test.ts (10). |
+| [FK-GAP-004](#fk-gap-004) | No ephemeral / broadcast real-time primitive (presence, typing) | missing-capability | primitive | medium | P2 | AppPort (events: authorization + scope) first; then FeltKit integration (ctx publish + client subscribe on AppPort events) | closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished). |
+| [FK-GAP-005](#fk-gap-005) | Live-query invalidation is per collection, not per query predicate | missing-capability | primitive | medium | P2 | FeltKit (change feed); FeltDB (F7 change listener naming keys) | implemented — rkendel1/feltkit branch claude/gap-005-006 (82dc40e), merged to FeltKit main: queries report keyed equality predicates; change events carry per-record HMAC keys (per-process key, never sent); /api/events withholds other tenants' records; watchQuery re-runs on key match. Limits: remote FeltDB stays per collection; writes outside FeltKit's commit path stay per collection. Tests: live-predicates.test.ts (6). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished). |
+| [FK-GAP-006](#fk-gap-006) | No text search / contains operator in ctx.db.query | missing-capability | primitive | low | P3 | FeltDB (index), FeltKit (exposure) | implemented in FeltKit (scan) — branch claude/gap-005-006 (82dc40e): app.collection(..., { search }) + ctx.db.search({ text, where, limit ≤ 100 }), tenant-scoped, live, fenced, works in AppBoundry guests on existing reads; cost linear in the `where` subset (50k cap). A FeltDB text index remains upstream (UPSTREAM-GAPS F23). Tests: search.test.ts (8). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished). |
+| [FK-GAP-007](#fk-gap-007) | Files are application-shared; per-resource file access must be bound by the app | missing-extension-point | integration | medium | P2 | AppPort Services (authorization by metadata, signed URLs); FeltKit (route) | closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished). |
+| [FK-GAP-008](#fk-gap-008) | No hosted, event-triggered execution for application agents | missing-capability | primitive | high | P1 | FeltKit + AppBoundry (execution); FeltDB agent state | implemented — rkendel1/feltkit branch claude/gap-008 (00a2ec6), merged to FeltKit main: app.agent(name, { principal, roles, on?, handler }) triggered by ctx.afterCommit.agent or app.event, recorded in the mutation's outbox, run at least once as the agent principal (its own roles, never the caller's) with leases and backoff, writes committed at most once (transaction id from the outbox id), restart recovery, tenant only where the agent is a member. AppBoundry: refused at build (needs a host interface). Tests: agents.test.ts (10). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished). |
 | [FK-GAP-009](#fk-gap-009) | AppBoundry deployment (Hetzner) is not available to an application | unsupported-requirement | deployment | high | P1 | AppBoundry | blocked (not actionable under current constraints) — needs Hetzner deployment, which is excluded ("No Hetzner contact or deployment"). Owner: AppBoundry / operator. |
 | [FK-GAP-010](#fk-gap-010) | No secure token / random primitive for application bearer secrets | missing-capability | primitive | medium | P2 | FeltKit (ctx.crypto) + AppBoundry (host interface crypto@1) — each in its own repository | closed — released in @feltdb/feltkit 0.3.16 and @appport/appboundry 1.9.0 (crypto@1); adopted by Multiplayer (workaround removed) |
 | [FK-GAP-011](#fk-gap-011) | Client reconnect waits out exponential backoff (up to 10 s) after the network returns | developer-experience | client | low | P3 | FeltKit client | closed in code — merged (FeltKit PR #62); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). |
@@ -204,7 +204,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 ### No ephemeral / broadcast real-time primitive (presence, typing)
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05).
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · closed in code — AppPort per-subscription authorization + scope released (@appport/server 1.3.0, protocol 1.4.1), AppBoundry events@1 released (@appport/appboundry 1.10.0), FeltKit app.event/useEvent merged (PR #63); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).
 
 **Components:**
 
@@ -258,6 +258,8 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 - appboundry packages/appboundry-host/test/events.test.ts (3, incl. HTTP SSE + revocation); host suite 78/13 skipped
 - cross-runtime: a FeltKit-built artifact with app.event on AppBoundry's host: member received, non-member nothing
 
+**Consumer acceptance:** Multiplayer adopted it: typing is an app.event (conversation.typing, scoped to the conversation, observe-authorized by feltkit({ authorize })) published by presence:typingIn and received with useEvent; the presence record keeps only lastSeenAt/status (who is around must outlast the moment). typingIn/typingUntil fields and their client expiry from stored records are gone. Tests: security.test.ts 'typing events reach only those who can read the conversation' (mutation-checked); e2e 'typing indicator' ~0.6 s.
+
 **Remaining / unverified:**
 
 - Release AppPort (core 1.6.1 + server with ada9157), then FeltKit/AppBoundry, then Multiplayer replaces its presence collection and heartbeat writes with presence events.
@@ -266,7 +268,7 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 ### Live-query invalidation is per collection, not per query predicate
 
-Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · implemented — rkendel1/feltkit branch claude/gap-005-006 (82dc40e, pushed; PR pending): queries report keyed equality predicates; change events carry per-record HMAC keys (per-process key, never sent); /api/events withholds other tenants' records; watchQuery re-runs on key match. Limits: remote FeltDB stays per collection; writes outside FeltKit's commit path stay per collection. Tests: live-predicates.test.ts (6).
+Discovered 2026-11-05 · missing-capability · primitive · severity medium · P2 · implemented — rkendel1/feltkit branch claude/gap-005-006 (82dc40e), merged to FeltKit main: queries report keyed equality predicates; change events carry per-record HMAC keys (per-process key, never sent); /api/events withholds other tenants' records; watchQuery re-runs on key match. Limits: remote FeltDB stays per collection; writes outside FeltKit's commit path stay per collection. Tests: live-predicates.test.ts (6). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).
 
 **Components:**
 
@@ -302,11 +304,15 @@ Discovered 2026-11-05 · missing-capability · primitive · severity medium · P
 
 **Dependencies:** none
 
+#### Platform work (2026-11-05)
+
+**Consumer acceptance:** Multiplayer adopted it: every equality read in its live queries is on a declared keyed field (ids, s.ref channelId/messageId/participantId, the rootId index, the tenant field), verified from the queries' reads (each collection read appears as collection#key, none whole-collection) in functional.test.ts 'live queries re-run only for writes they can see': a post in #random does not re-run #general's messages.list, a post in #general does. No app code needed beyond the declarations it already had.
+
 ## FK-GAP-006
 
 ### No text search / contains operator in ctx.db.query
 
-Discovered 2026-11-05 · missing-capability · primitive · severity low · P3 · implemented in FeltKit (scan) — branch claude/gap-005-006 (82dc40e): app.collection(..., { search }) + ctx.db.search({ text, where, limit ≤ 100 }), tenant-scoped, live, fenced, works in AppBoundry guests on existing reads; cost linear in the `where` subset (50k cap). A FeltDB text index remains upstream (UPSTREAM-GAPS F23). Tests: search.test.ts (8).
+Discovered 2026-11-05 · missing-capability · primitive · severity low · P3 · implemented in FeltKit (scan) — branch claude/gap-005-006 (82dc40e): app.collection(..., { search }) + ctx.db.search({ text, where, limit ≤ 100 }), tenant-scoped, live, fenced, works in AppBoundry guests on existing reads; cost linear in the `where` subset (50k cap). A FeltDB text index remains upstream (UPSTREAM-GAPS F23). Tests: search.test.ts (8). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).
 
 **Components:**
 
@@ -341,11 +347,15 @@ Discovered 2026-11-05 · missing-capability · primitive · severity low · P3 �
 
 **Dependencies:** none
 
+#### Platform work (2026-11-05)
+
+**Consumer acceptance:** Multiplayer adopted it: messages declares search: ['text']; messages:search runs ctx.db.search once per conversation the caller can read (where: { channelId }, limit 50) and merges newest first, so unreadable conversations are never searched. The app's workspace-wide scan and substring match are gone. Tests: functional/security search tests unchanged and passing.
+
 ## FK-GAP-007
 
 ### Files are application-shared; per-resource file access must be bound by the app
 
-Discovered 2026-11-05 · missing-extension-point · integration · severity medium · P2 · closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Multiplayer adoption: Phase 2 migration.
+Discovered 2026-11-05 · missing-extension-point · integration · severity medium · P2 · closed in code — file links merged (FeltKit PR #64); merged to FeltKit main (0.3.17 in package.json; npm still 0.3.16 at 2026-11-05). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).
 
 **Components:**
 
@@ -397,11 +407,13 @@ Discovered 2026-11-05 · missing-extension-point · integration · severity medi
 
 - feltkit test/file-links.test.ts (4): upload->bind->download, membership decides link issuance, unknown/expired/used/wrong-kind/over-limit refused, removed file link 404
 
+**Consumer acceptance:** Multiplayer adopted it: attachments:uploadLink (files.uploadLink with function-fixed metadata { workspaceId, channelId }) → client.uploadFile → attachments:attach (checks owner, metadata, single binding) and attachments:download (files.link) → client.fileUrl. _base64.ts and all base64/Blob conversions are gone. Tests: functional upload/download over HTTP links; security 'unauthorized file access' (links only for readers/members, foreign/used files refused, forged link 404); e2e 'files: upload and download through FeltKit file links'.
+
 ## FK-GAP-008
 
 ### No hosted, event-triggered execution for application agents
 
-Discovered 2026-11-05 · missing-capability · primitive · severity high · P1 · implemented — rkendel1/feltkit branch claude/gap-008 (00a2ec6, pushed; PR pending): app.agent(name, { principal, roles, on?, handler }) triggered by ctx.afterCommit.agent or app.event, recorded in the mutation's outbox, run at least once as the agent principal (its own roles, never the caller's) with leases and backoff, writes committed at most once (transaction id from the outbox id), restart recovery, tenant only where the agent is a member. AppBoundry: refused at build (needs a host interface). Tests: agents.test.ts (10).
+Discovered 2026-11-05 · missing-capability · primitive · severity high · P1 · implemented — rkendel1/feltkit branch claude/gap-008 (00a2ec6), merged to FeltKit main: app.agent(name, { principal, roles, on?, handler }) triggered by ctx.afterCommit.agent or app.event, recorded in the mutation's outbox, run at least once as the agent principal (its own roles, never the caller's) with leases and backoff, writes committed at most once (transaction id from the outbox id), restart recovery, tenant only where the agent is a member. AppBoundry: refused at build (needs a host interface). Tests: agents.test.ts (10). Adopted by Multiplayer (2026-11-05; needs FeltKit ≥ 0.3.18, unpublished).
 
 **Components:**
 
@@ -437,6 +449,10 @@ Discovered 2026-11-05 · missing-capability · primitive · severity high · P1 
 **Architectural owner:** FeltKit + AppBoundry (execution); FeltDB agent state
 
 **Dependencies:** none
+
+#### Platform work (2026-11-05)
+
+**Consumer acceptance:** Multiplayer adopted it: the room agent is app.agent('assistant') (roles ['agent'], access agents.work), triggered by ctx.afterCommit.agent in messages:send when @assistant (a FeltKit member of the workspace) is mentioned; the deterministic composer moved to feltkit/_compose.ts. Removed: agents:pending/claim/context/respond/failRequest, the 2-minute lease, agent/worker.ts and agent/room-agent.ts (tenant listing/switching loop), the agent's dev user. Note: app.agent cannot opt into retry.sequenceConflicts, so overlapping replies in one conversation are retried with backoff (set to 250 ms). AppBoundry build refuses app.agent (documented; FK-GAP-013 blocks AppBoundry anyway). Tests: functional agent tests via t.runtime.settleAgents(), security 'agent permission escalation', 'overlapping agent runs'; e2e agent round trip ~0.2 s.
 
 ## FK-GAP-009
 

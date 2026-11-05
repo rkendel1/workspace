@@ -19,7 +19,6 @@ export const get = app.query({
       members.push({
         participantId: p.id, handle: p.handle, displayName: p.displayName, title: p.title ?? null, kind: p.kind, agentType: p.agentType ?? null, persona: Boolean(p.persona),
         lastSeenAt: pr?.lastSeenAt ?? null, status: pr?.status ?? null,
-        typingIn: pr?.typingIn ?? null, typingUntil: pr?.typingUntil ?? null,
       });
     }
     members.sort((a, b) => (a.displayName.toLowerCase() < b.displayName.toLowerCase() ? -1 : 1));

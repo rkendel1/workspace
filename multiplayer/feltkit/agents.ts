@@ -1,29 +1,82 @@
 import { fail, s } from "@feltdb/feltkit";
 import { activity, agentRequests, app, messages, participants, sharedObjects } from "./app.js";
-
-const Pending = s.array(s.object({ id: s.string(), workspaceId: s.string(), channelId: s.string(), prompt: s.string(), createdAt: s.number() }));
-const Context = s.object({
-  request: s.object({ id: s.string(), prompt: s.string(), requestedBy: s.string(), requestedByHandle: s.nullable(s.string()) }),
-  channel: s.object({ id: s.string(), name: s.string(), kind: s.string(), topic: s.nullable(s.string()) }),
-  messages: s.array(s.object({ id: s.string(), author: s.string(), handle: s.string(), authorKind: s.string(), text: s.string(), createdAt: s.number() })),
-});
 import { me, readableChannels, loadChannel, loadWorkspace } from "./_authz.js";
+import { composeDeterministic, type Composer, type Context } from "./_compose.js";
 import { ensureRoomAgent, insertMessage, ROOM_AGENT } from "./_ops.js";
 import { record } from "./_util.js";
 
 /**
- * The room agent (FK-GAP-008). People ask it by @mention (messages:send records an agentRequest).
- * The agent is an external worker holding its own agent session (principal ROOM_AGENT) and a FeltKit
- * membership (role "agent") in each workspace it serves; it switches into each and works that
- * workspace's queue through these capabilities, so roles, tenant scoping and the channel policy apply
- * to it exactly as to a person. It can only read conversations it was brought into.
+ * The room agent (FK-GAP-008), a FeltKit application agent (`app.agent`). A person @mentions it:
+ * messages:send records an agentRequest (what was asked, by whom; the UI shows its state) and
+ * triggers the agent with `ctx.afterCommit.agent`, in the same transaction. FeltKit runs the handler
+ * after the commit as the agent's own principal ("assistant", type agent, role "agent"), through the
+ * same roles, tenant scoping and `authorize` as any call (function "agent/assistant"; the policy lets
+ * it work only its own requests in conversations it was brought into). It works in the caller's
+ * workspace only while it is a FeltKit member there itself. Delivery is at least once, its writes at
+ * most once (FeltKit's outbox, lease, retries and transaction ids); the handler is also idempotent
+ * on the request's status. Not available in AppBoundry artifacts (FeltKit refuses app.agent there).
  */
-const LEASE_MS = 2 * 60 * 1000;
+const compose: Composer = composeDeterministic;
+
+export const assistant = app.agent("assistant", {
+  principal: { id: ROOM_AGENT, displayName: "Assistant" },
+  roles: ["agent"],
+  access: "agents.work",
+  // Overlapping replies in one conversation contend on its message sequence; app.agent cannot opt into
+  // in-place re-execution (mutations can: retry.sequenceConflicts), so the loser is retried soon.
+  retry: { maxAttempts: 6, backoffMs: 250 },
+  handler: async (ctx, input: { requestId: string }) => {
+    const agent = await me(ctx);
+    const req = await ctx.db.get(agentRequests, input.requestId);
+    if (!req || req.status !== "pending") return; // answered already (a repeated delivery)
+    const { channel } = await loadChannel(ctx, req.channelId);
+    const context = await conversation(ctx, req, channel);
+    let reply;
+    try {
+      reply = await compose(context);
+    } catch (error: any) {
+      await ctx.db.patch(agentRequests, req.id, { status: "failed", finishedAt: Date.now(), error: String(error?.message ?? error).slice(0, 500) });
+      return;
+    }
+    const plan = reply.plan;
+    if (plan) ctx.auth.require("plans.write");
+    const now = Date.now();
+    const sharedObjectId = plan
+      ? await ctx.db.insert(sharedObjects, { workspaceId: channel.workspaceId, channelId: channel.id, kind: "project_plan", ...plan, createdBy: agent.id, requestedBy: req.requestedBy, createdAt: now })
+      : undefined;
+    const source = (await ctx.db.get(messages, req.messageId))!;
+    const root = (await ctx.db.get(messages, source.rootId ?? source.id))!;
+    const requester = await ctx.db.get(participants, req.requestedBy);
+    const { id } = await insertMessage(ctx, channel, agent.id, { text: reply.text, root, mentions: requester ? [requester.id] : [], ...(sharedObjectId ? { sharedObjectId } : {}) });
+    await ctx.db.patch(agentRequests, req.id, { status: "done", finishedAt: now, replyId: id, ...(sharedObjectId ? { sharedObjectId } : {}) });
+    await record(ctx, channel.workspaceId, agent.id, plan ? "agent.plan.created" : "agent.replied", plan ? `@${agent.handle} created plan "${plan.title}"` : `@${agent.handle} replied`, sharedObjectId ?? id);
+    if (requester && requester.kind === "human" && !requester.persona) {
+      ctx.afterCommit.notifications.send({ recipient: requester.principalId, type: "agent.replied", title: `@${agent.handle} answered you`, body: reply.text.slice(0, 200), data: { workspaceId: channel.workspaceId, channelId: channel.id, messageId: id }, idempotencyKey: `agent:${req.id}` });
+    }
+  },
+});
+
+/** What the agent reads to answer: the thread the request was made in, or the channel's recent top-level messages, up to the request. */
+async function conversation(ctx: any, req: any, channel: any): Promise<Context> {
+  const source = (await ctx.db.get(messages, req.messageId))!;
+  const scope = source.rootId
+    ? [(await ctx.db.get(messages, source.rootId))!, ...(await ctx.db.find(messages, { rootId: source.rootId }))]
+    : (await ctx.db.query(messages, { where: [{ field: "channelId", eq: req.channelId }, { field: "topLevel", eq: true }, { field: "seq", lte: source.seq }], orderBy: [{ field: "seq", direction: "desc" }], limit: 150 })).records;
+  const names = new Map<string, any>();
+  const out = [];
+  for (const m of scope.filter((m: any) => !m.deletedAt).sort((a: any, b: any) => a.seq - b.seq)) {
+    if (!names.has(m.authorId)) names.set(m.authorId, await ctx.db.get(participants, m.authorId));
+    const a = names.get(m.authorId);
+    out.push({ id: m.id, author: a?.displayName ?? "Unknown", handle: a?.handle ?? "unknown", authorKind: a?.kind ?? "human", text: m.text, createdAt: m.createdAt });
+  }
+  const requester = await ctx.db.get(participants, req.requestedBy);
+  return { request: { id: req.id, prompt: req.prompt, requestedBy: requester?.displayName ?? "someone", requestedByHandle: requester?.handle ?? null }, channel: { id: channel.id, name: channel.name, kind: channel.kind, topic: channel.topic ?? null }, messages: out };
+}
 
 /**
  * After an admin added the room agent to the workspace through FeltKit (client.addMember("assistant",
- * "agent")): make sure it has a profile (so @assistant resolves before its process first runs) and
- * record it. Mentions reach it only while it is a FeltKit member.
+ * "agent")): make sure it has a profile (so @assistant resolves) and record it. Mentions reach it only
+ * while it is a FeltKit member.
  */
 export const add = app.mutation({
   access: "workspaces.write",
@@ -36,127 +89,6 @@ export const add = app.mutation({
       await record(ctx, workspaceId, participant.id, "agent.added", `${participant.displayName} added @${ROOM_AGENT} to the workspace`, agentId);
     }
     return agentId;
-  },
-});
-
-async function myRequest(ctx: any, requestId: string) {
-  const agent = await me(ctx);
-  const req = await ctx.db.get(agentRequests, requestId);
-  if (!req) fail("NOT_FOUND", "Request not found."); // ownership: feltkit/_authz.ts (AGENT_WORK)
-  return { agent, req };
-}
-
-/** The calling agent's open requests in the session's workspace (pending, or working with an expired lease). */
-export const pending = app.query({
-  access: "agents.work",
-  returns: Pending,
-  capability: { name: "agent.pending", description: "Requests waiting for the calling agent." },
-  handler: async (ctx) => {
-    const principal = ctx.auth.requirePrincipal();
-    const [agent] = await ctx.db.find(participants, { principalId: principal.id });
-    if (!agent || !ctx.auth.tenant) return [];
-    const now = Date.now();
-    const open = [
-      ...(await ctx.db.find(agentRequests, { agentId: agent.id, status: "pending" })),
-      ...(await ctx.db.find(agentRequests, { agentId: agent.id, status: "working" })).filter((r) => (r.claimedAt ?? 0) + LEASE_MS < now),
-    ];
-    return open.sort((a, b) => a.createdAt - b.createdAt).map((r) => ({ id: r.id, workspaceId: r.workspaceId, channelId: r.channelId, prompt: r.prompt, createdAt: r.createdAt }));
-  },
-});
-
-/** Take a request. Two workers claiming the same one: FeltDB's commit check lets one win (CONFLICT). */
-export const claim = app.mutation({
-  access: "agents.work",
-  args: { requestId: s.string() },
-  returns: s.object({ claimedAt: s.number() }),
-  capability: { name: "agent.claim", description: "Claim a pending request (a lease of two minutes)." },
-  handler: async (ctx, { requestId }) => {
-    const { req } = await myRequest(ctx, requestId);
-    const now = Date.now();
-    const free = req.status === "pending" || (req.status === "working" && (req.claimedAt ?? 0) + LEASE_MS < now);
-    if (!free) fail("FAILED_PRECONDITION", `Request is ${req.status}.`);
-    await ctx.db.patch(agentRequests, requestId, { status: "working", claimedAt: now });
-    return { claimedAt: now };
-  },
-});
-
-/** What the agent may read to answer: the conversation (it must be a member), up to the request. */
-export const context = app.query({
-  access: "agents.work",
-  args: { requestId: s.string() },
-  returns: Context,
-  capability: { name: "agent.context", description: "The conversation an agent request was made in, authorized by the agent's own membership." },
-  handler: async (ctx, { requestId }) => {
-    const { req } = await myRequest(ctx, requestId);
-    const { channel } = await loadChannel(ctx, req.channelId);
-    const source = (await ctx.db.get(messages, req.messageId))!;
-    // The thread the request was made in, or the channel's recent top-level messages.
-    const scope = source.rootId
-      ? [(await ctx.db.get(messages, source.rootId))!, ...(await ctx.db.find(messages, { rootId: source.rootId }))]
-      : (await ctx.db.query(messages, { where: [{ field: "channelId", eq: req.channelId }, { field: "topLevel", eq: true }, { field: "seq", lte: source.seq }], orderBy: [{ field: "seq", direction: "desc" }], limit: 150 })).records;
-    const names = new Map<string, any>();
-    const out = [];
-    for (const m of scope.filter((m: any) => !m.deletedAt).sort((a: any, b: any) => a.seq - b.seq)) {
-      if (!names.has(m.authorId)) names.set(m.authorId, await ctx.db.get(participants, m.authorId));
-      const a = names.get(m.authorId);
-      out.push({ id: m.id, author: a?.displayName ?? "Unknown", handle: a?.handle ?? "unknown", authorKind: a?.kind ?? "human", text: m.text, createdAt: m.createdAt });
-    }
-    const requester = await ctx.db.get(participants, req.requestedBy);
-    return { request: { id: req.id, prompt: req.prompt, requestedBy: requester?.displayName ?? "someone", requestedByHandle: requester?.handle ?? null }, channel: { id: channel.id, name: channel.name, kind: channel.kind, topic: channel.topic ?? null }, messages: out };
-  },
-});
-
-const PlanItem = s.object({ title: s.string({ minLength: 1, maxLength: 300 }), owner: s.optional(s.string({ maxLength: 80 })), due: s.optional(s.string({ maxLength: 40 })), sourceMessageId: s.optional(s.string()) });
-const Plan = s.object({
-  title: s.string({ minLength: 1, maxLength: 160 }), summary: s.string({ maxLength: 4000 }),
-  goals: s.array(s.string({ maxLength: 300 }), { maxItems: 20 }), tasks: s.array(PlanItem, { maxItems: 50 }),
-  decisions: s.array(s.string({ maxLength: 300 }), { maxItems: 20 }), risks: s.array(s.string({ maxLength: 300 }), { maxItems: 20 }),
-  openQuestions: s.array(s.string({ maxLength: 300 }), { maxItems: 20 }), sourceMessageIds: s.array(s.string(), { maxItems: 200 }),
-});
-
-/**
- * Answer a claimed request, in one FeltDB transaction: persist the plan (if any), post the reply
- * referencing it, close the request, record the activity. Nothing is half-done.
- */
-export const respond = app.mutation({
-  access: "agents.work",
-  retry: { sequenceConflicts: 3 },
-  args: { requestId: s.string(), text: s.string({ minLength: 1, maxLength: 8000 }), plan: s.optional(Plan) },
-  returns: s.object({ messageId: s.string(), sharedObjectId: s.optional(s.string()) }),
-  capability: { name: "agent.respond", description: "Reply to a claimed request and optionally persist a structured project plan in the conversation." },
-  handler: async (ctx, { requestId, text, plan }) => {
-    const { agent, req } = await myRequest(ctx, requestId);
-    if (req.status !== "working") fail("FAILED_PRECONDITION", `Request is ${req.status}; claim it first.`);
-    const { channel } = await loadChannel(ctx, req.channelId);
-    if (plan) ctx.auth.require("plans.write");
-    const source = (await ctx.db.get(messages, req.messageId))!;
-    const now = Date.now();
-    const sharedObjectId = plan
-      ? await ctx.db.insert(sharedObjects, { workspaceId: channel.workspaceId, channelId: channel.id, kind: "project_plan", ...plan, createdBy: agent.id, requestedBy: req.requestedBy, createdAt: now })
-      : undefined;
-    const rootId = source.rootId ?? source.id;
-    const root = (await ctx.db.get(messages, rootId))!;
-    const requester = await ctx.db.get(participants, req.requestedBy);
-    const { id } = await insertMessage(ctx, channel, agent.id, { text, root, mentions: requester ? [requester.id] : [], ...(sharedObjectId ? { sharedObjectId } : {}) });
-    await ctx.db.patch(agentRequests, requestId, { status: "done", finishedAt: now, replyId: id, ...(sharedObjectId ? { sharedObjectId } : {}) });
-    await record(ctx, channel.workspaceId, agent.id, plan ? "agent.plan.created" : "agent.replied", plan ? `@${agent.handle} created plan "${plan.title}"` : `@${agent.handle} replied`, sharedObjectId ?? id);
-    if (requester && requester.kind === "human" && !requester.persona) {
-      ctx.afterCommit.notifications.send({ recipient: requester.principalId, type: "agent.replied", title: `@${agent.handle} answered you`, body: text.slice(0, 200), data: { workspaceId: channel.workspaceId, channelId: channel.id, messageId: id }, idempotencyKey: `agent:${requestId}` });
-    }
-    return { messageId: id, ...(sharedObjectId ? { sharedObjectId } : {}) };
-  },
-});
-
-export const failRequest = app.mutation({
-  access: "agents.work",
-  args: { requestId: s.string(), error: s.string({ minLength: 1, maxLength: 500 }) },
-  returns: s.null(),
-  capability: { name: "agent.fail", description: "Give up on a claimed request with a reason." },
-  handler: async (ctx, { requestId, error }) => {
-    const { req } = await myRequest(ctx, requestId);
-    if (req.status !== "working") fail("FAILED_PRECONDITION", `Request is ${req.status}.`);
-    await ctx.db.patch(agentRequests, requestId, { status: "failed", finishedAt: Date.now(), error });
-    return null;
   },
 });
 
