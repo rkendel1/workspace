@@ -331,7 +331,7 @@ function MessageRow({ m, me, grouped, onOpenThread, onOpenPlan, toasts }: { m: M
           </form>
         ) : m.text && <div className="msg-text"><RichText text={m.text} />{m.editedAt && <span className="muted small"> (edited)</span>}</div>}
         {m.attachments.map((a) => (
-          <button key={a.id} className="file-chip" onClick={() => void download(a)} title={`Download ${a.name}`}>
+          <button key={a.id} className="file-chip" onClick={() => void download(a)} title={`Download ${a.name}`} aria-label={`Download ${a.name}, ${bytes(a.size)}`}>
             <span className="file-icon">{a.contentType.startsWith("image/") ? "🖼" : "📄"}</span><span><strong>{a.name}</strong><br /><span className="muted small">{bytes(a.size)} · Download</span></span>
           </button>
         ))}

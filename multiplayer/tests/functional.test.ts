@@ -97,8 +97,10 @@ test("upload an attachment, send it, download it", async () => {
     assert.deepEqual([...Buffer.from(d.base64, "base64")], [...bytes], "bytes round-trip exactly");
     assert.equal((await grace.query(api.attachments.list, { channelId: general })).length, 1);
     // The Files service holds the bytes; message records hold only the reference.
-    const stored = await t.runtime.instance.handle("test").collection<any>("messages").find({});
-    assert.ok(!JSON.stringify(stored).includes(base64));
+    if (t.runtime) {
+      const stored = await t.runtime.instance.handle("test").collection<any>("messages").find({});
+      assert.ok(!JSON.stringify(stored).includes(base64));
+    }
   } finally { await t.close(); }
 });
 

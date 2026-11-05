@@ -283,11 +283,13 @@
       "evidence": [
         "appboundry docs/feltkit-deploy-readiness.md: 'Nothing here is deployed'; Routing 'designed, not implemented'; 'Untrusted execution in production: not ready'",
         "feltkit docs/APPBOUNDRY-DEPLOY-CONTRACT.md: 'not deployed'",
-        "No APPBOUNDRY_URL / APPBOUNDRY_TOKEN in this environment"
+        "No APPBOUNDRY_URL / APPBOUNDRY_TOKEN in this environment",
+        "npx feltkit deploy --target appboundry (2026-11-05): '✗ Deploying to AppBoundry needs APPBOUNDRY_URL (the AppBoundry portal), APPBOUNDRY_TOKEN (an AppBoundry deploy token).'",
+        "https://appboundry.fly.dev/api/applications/multiplayer/hosting → HTTP 401 (portal up; contract's AUTHENTICATION_REQUIRED)"
       ],
       "wanted": "A working public URL on the approved Hetzner target.",
       "provided": "feltkit build --target appboundry (artifact) and @appport/appboundry run (local runtime).",
-      "implementedManually": "Nothing (not substituted).",
+      "implementedManually": "deploy/verify-appboundry.sh: builds the artifact and verifies it on the published runtime @appport/appboundry@1.8.0 (8/8 browser checks, restart recovery). No substitute hosting was provisioned.",
       "workaround": "Build the artifact and verify it on the published AppBoundry runtime locally; no invented deployment.",
       "customLoc": "0",
       "estimatedHours": "0",
@@ -382,6 +384,67 @@
       "severity": "low",
       "priority": "P3",
       "status": "accepted (by design)"
+    },
+    {
+      "id": "FK-GAP-013",
+      "discovered": "2026-11-05",
+      "title": "FeltKit built-in accounts (sign-up / sign-in) are not available when the artifact runs on AppBoundry",
+      "category": "missing-integration",
+      "layer": "integration",
+      "components": [
+        "rkendel1/feltkit (auth.accounts)",
+        "@appport/appboundry 1.8.0 (identity@1)"
+      ],
+      "description": "The app declares auth: { accounts: { roles: ['member'] } }. Under feltkit dev/start, people sign up with e-mail and password. The same artifact on AppBoundry (production environment) reports 'sessions issued by operators only': /api/session has no `accounts`, and every user must be created with `appboundry admin users add` and given an operator-issued session. A self-serve collaboration product cannot onboard people on the approved target.",
+      "evidence": [
+        "appboundry run output: 'Environment production (sessions issued by operators only)'",
+        "GET /api/session on the artifact: {devUsers: [], dashboard: null} — no accounts key; on feltkit dev the same call returns accounts: {signUp: true}",
+        "deploy/verify-appboundry.sh provisions ada/grace/assistant with appboundry admin users add + sessions issue"
+      ],
+      "wanted": "People sign up and accept an invitation link on the deployed app.",
+      "provided": "Operator-provisioned users and sessions (AppBoundry admin CLI).",
+      "implementedManually": "Nothing in the app; deployment script provisions identities by hand.",
+      "workaround": "Operator issues sessions; the app's SessionForm (from the starter) accepts a pasted session.",
+      "customLoc": "0 app code (~10 lines of deployment script)",
+      "estimatedHours": "0.5",
+      "codeFate": "n/a",
+      "proposal": "AppBoundry: implement the accounts interface FeltKit's manifest declares (or delegate to AuthBoundry), so auth.accounts behaves the same on both runtimes; feltkit build should warn when the target cannot honour auth.accounts.",
+      "owner": "AppBoundry (identity host interface); AuthBoundry as the eventual identity owner",
+      "dependencies": [
+        "FK-GAP-002"
+      ],
+      "severity": "high",
+      "priority": "P1",
+      "status": "open (blocks self-serve onboarding on the approved target)"
+    },
+    {
+      "id": "FK-GAP-014",
+      "discovered": "2026-11-05",
+      "title": "MCP endpoint (and Studio) are not part of the artifact; agents on AppBoundry use HTTP only",
+      "category": "missing-integration",
+      "layer": "integration",
+      "components": [
+        "rkendel1/feltkit (feltkit build --target appboundry)",
+        "AppBoundry"
+      ],
+      "description": "feltkit build --target appboundry notes 'FeltKit Studio and the MCP endpoint are served by FeltKit, not by an artifact.' External agents that speak MCP cannot connect to the deployed app. The room agent works because it uses FeltKit's function API with an agent session, which AppBoundry serves.",
+      "evidence": [
+        "feltkit build --target appboundry: '• Not in the artifact: FeltKit Studio (the development dashboard) and the MCP endpoint'",
+        "deploy/verify-appboundry.sh: room agent answers over HTTP on the artifact"
+      ],
+      "wanted": "Agents discover and invoke the app's capabilities over MCP wherever the app runs.",
+      "provided": "MCP on feltkit dev/start only.",
+      "implementedManually": "Room agent uses the HTTP client instead of MCP.",
+      "workaround": "HTTP function API with an agent session.",
+      "customLoc": "0",
+      "estimatedHours": "0",
+      "codeFate": "n/a",
+      "proposal": "AppBoundry serves /appport and /mcp from the manifest's AppPort contract (the capability set is already in manifest.json).",
+      "owner": "AppBoundry (web interface); AppPort (MCP transport)",
+      "dependencies": [],
+      "severity": "medium",
+      "priority": "P2",
+      "status": "open"
     }
   ]
 }
