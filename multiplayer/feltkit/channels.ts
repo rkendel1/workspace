@@ -1,7 +1,7 @@
 import { fail, s } from "@feltdb/feltkit";
-import { app, channelMembers, channels, memberships, messages, participants } from "./app.js";
+import { app, channelMembers, channels, messages, participants } from "./app.js";
 import { atLeast, me, readableChannels, loadChannel, loadWorkspace } from "./_authz.js";
-import { joinChannel } from "./_ops.js";
+import { inWorkspace, joinChannel } from "./_ops.js";
 import { channelName, record } from "./_util.js";
 
 const UNREAD_CAP = 99;
@@ -9,11 +9,11 @@ const UNREAD_CAP = 99;
 /** The sidebar: conversations the caller can see, with membership and unread counts. */
 export const list = app.query({
   access: "channels.read",
-  args: { workspaceId: s.string() },
-  handler: async (ctx, { workspaceId }) => {
-    const { participant, membership } = await loadWorkspace(ctx, workspaceId);
-    const visible = await readableChannels(ctx, workspaceId, participant.id, membership.role);
-    const mine = new Map((await ctx.db.find(channelMembers, { workspaceId, participantId: participant.id })).map((m) => [m.channelId, m]));
+  args: { workspaceId: s.optional(s.string()) },
+  handler: async (ctx) => {
+    const { participant, role } = await loadWorkspace(ctx);
+    const visible = await readableChannels(ctx, participant.id, role);
+    const mine = new Map((await ctx.db.find(channelMembers, { participantId: participant.id })).map((m) => [m.channelId, m]));
     const out = [];
     for (const c of visible) {
       const member = mine.get(c.id);
@@ -48,7 +48,7 @@ export const get = app.query({
   access: "channels.read",
   args: { channelId: s.string() },
   handler: async (ctx, { channelId }) => {
-    const { channel, member, membership } = await loadChannel(ctx, channelId);
+    const { channel, member, role } = await loadChannel(ctx, channelId);
     const members = [];
     for (const m of await ctx.db.find(channelMembers, { channelId })) {
       const p = await ctx.db.get(participants, m.participantId);
@@ -57,21 +57,21 @@ export const get = app.query({
     return {
       id: channel.id, workspaceId: channel.workspaceId, kind: channel.kind, name: channel.name, topic: channel.topic ?? null, isDefault: Boolean(channel.isDefault),
       isMember: Boolean(member), lastReadSeq: member?.lastReadSeq ?? 0, members,
-      canManage: atLeast(membership.role, "admin") || channel.createdBy === member?.participantId,
+      canManage: atLeast(role, "admin") || channel.createdBy === member?.participantId,
     };
   },
 });
 
 export const create = app.mutation({
   access: "channels.write",
-  args: { workspaceId: s.string(), name: s.string({ minLength: 1, maxLength: 80 }), kind: s.enum(["public", "private"]), topic: s.optional(s.string({ maxLength: 250 })) },
+  args: { workspaceId: s.optional(s.string()), name: s.string({ minLength: 1, maxLength: 80 }), kind: s.enum(["public", "private"]), topic: s.optional(s.string({ maxLength: 250 })) },
   returns: s.string(),
-  capability: { name: "channels.create", description: "Create a public or private channel in a workspace the caller belongs to." },
-  handler: async (ctx, { workspaceId, name, kind, topic }) => {
-    const { participant } = await loadWorkspace(ctx, workspaceId);
+  capability: { name: "channels.create", description: "Create a public or private channel in the session's workspace." },
+  handler: async (ctx, { name, kind, topic }) => {
+    const { participant, workspaceId } = await loadWorkspace(ctx);
     const clean = channelName(name);
     if (!clean) fail("INVALID_ARGUMENT", "Channel names use letters, numbers and dashes.");
-    const taken = (await ctx.db.find(channels, { workspaceId, name: clean })).some((c) => c.kind === "public" || c.kind === "private");
+    const taken = (await ctx.db.find(channels, { name: clean })).some((c) => c.kind === "public" || c.kind === "private");
     if (taken) fail("FAILED_PRECONDITION", `#${clean} already exists.`);
     const id = await ctx.db.insert(channels, { workspaceId, kind, name: clean, ...(topic?.trim() ? { topic: topic.trim() } : {}), createdBy: participant.id, createdAt: Date.now() });
     await joinChannel(ctx, workspaceId, id, participant.id);
@@ -123,8 +123,7 @@ export const addMembers = app.mutation({
     if (channel.kind === "dm") fail("FAILED_PRECONDITION", "Start a group conversation to add people.");
     const names = [];
     for (const pid of participantIds) {
-      const [m] = await ctx.db.find(memberships, { workspaceId: channel.workspaceId, participantId: pid });
-      if (!m) fail("NOT_FOUND", "Someone you added is not in this workspace.");
+      if (!(await inWorkspace(ctx, pid))) fail("NOT_FOUND", "Someone you added is not in this workspace.");
       await joinChannel(ctx, channel.workspaceId, channelId, pid);
       names.push((await ctx.db.get(participants, pid))?.displayName ?? pid);
     }
@@ -135,17 +134,17 @@ export const addMembers = app.mutation({
 /** Open (or find) the direct message or group conversation with exactly these people. */
 export const openConversation = app.mutation({
   access: "channels.write",
-  args: { workspaceId: s.string(), participantIds: s.array(s.string(), { minItems: 1, maxItems: 8 }) },
+  args: { workspaceId: s.optional(s.string()), participantIds: s.array(s.string(), { minItems: 1, maxItems: 8 }) },
   returns: s.string(),
   capability: { name: "conversations.open", description: "Open a direct message or group conversation with workspace members." },
-  handler: async (ctx, { workspaceId, participantIds }) => {
-    const { participant } = await loadWorkspace(ctx, workspaceId);
+  handler: async (ctx, { participantIds }) => {
+    const { participant, workspaceId } = await loadWorkspace(ctx);
     const ids = [...new Set([participant.id, ...participantIds])].sort();
     for (const pid of ids) {
-      if (!(await ctx.db.find(memberships, { workspaceId, participantId: pid })).length) fail("NOT_FOUND", "Someone in that conversation is not in this workspace.");
+      if (!(await inWorkspace(ctx, pid))) fail("NOT_FOUND", "Someone in that conversation is not in this workspace.");
     }
     const dmKey = ids.join(",");
-    const [existing] = await ctx.db.find(channels, { workspaceId, dmKey });
+    const [existing] = await ctx.db.find(channels, { dmKey });
     if (existing) return existing.id;
     const kind = ids.length <= 2 ? "dm" : "group";
     const id = await ctx.db.insert(channels, { workspaceId, kind, name: kind, dmKey, createdBy: participant.id, createdAt: Date.now() });

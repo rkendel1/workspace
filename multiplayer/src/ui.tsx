@@ -1,6 +1,5 @@
 /** Small UI primitives: toasts, avatars, time formatting, a modal. */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { describe } from "./auth";
 
 type Toast = { id: number; tone: "error" | "info"; text: string };
 
@@ -98,4 +97,12 @@ export function useNow(ms = 5000) {
     return () => clearInterval(t);
   }, [ms]);
   return now;
+}
+
+/** A refusal or failure, in words for a toast. */
+export function describe(error: unknown): string {
+  const e = error as { code?: string; message?: string };
+  if (e?.code === "FORBIDDEN") return `Not allowed: ${e.message}`;
+  if (e?.code === "UNAUTHORIZED") return "Sign in to continue.";
+  return e?.message ?? String(error);
 }

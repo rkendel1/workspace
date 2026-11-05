@@ -1,46 +1,60 @@
 /**
  * Multiplayer: a workspace where people and agents talk, share files and produce work together.
  *
- * Authority has two layers, both enforced by FeltKit for every call on every interface:
- *   1. Application roles (below) grant AppPort permissions: which functions a principal may call.
- *   2. `authorize` (feltkit/_authz.ts) decides which workspace and conversation records the caller
- *      may touch, from the validated arguments and the stored memberships. Handlers do not repeat it.
+ * Workspaces are FeltKit tenants (`auth.tenant`): FeltKit owns workspaces, memberships, roles,
+ * invitations and switching, and resolves the session's workspace and the caller's role there from
+ * the live membership on every request. Authority has two layers, both enforced by FeltKit for every
+ * call on every interface:
+ *   1. Roles (below) grant AppPort permissions. A workspace role (owner, admin, member, guest, agent)
+ *      is held only in a session working in that workspace; an account alone holds "person" (nothing).
+ *   2. `authorize` (feltkit/_authz.ts) keeps the application's own conversation policy: private
+ *      channels, direct messages, the agent's queue. Workspace data collections are tenant-scoped, so
+ *      another workspace's records do not exist for a call.
  *
- * Durable records (messages, memberships, plans, activity) live in this app's FeltDB instance.
  * Presence and typing are short-lived, bounded state: one overwritten record per participant per
  * workspace (see presence.ts and the build report for why).
  */
 import { feltkit, s } from "@feltdb/feltkit";
 import { authorize } from "./_authz.js";
 
-const HUMAN = [
-  "workspaces.*", "channels.*", "messages.*", "invitations.*", "presence.*",
-  "plans.read", "agents.request", "files.*", "notifications.*", "activity.read",
-];
+const PERSON = ["channels.*", "messages.*", "presence.*", "plans.read", "agents.request", "files.*", "notifications.*", "activity.read", "workspaces.*"];
 
 export const app = feltkit({
   name: "multiplayer",
   description: "Multiplayer: real-time workspaces for people and agents.",
   roles: {
-    member: HUMAN,
+    // Every account: its profile and notifications, nothing in any workspace until it works in one.
+    person: ["notifications.*"],
+    // Workspace roles (auth.tenant.roles), held only in a session working in that workspace.
+    owner: [...PERSON, "tenant.*"],
+    admin: [...PERSON, "tenant.members.manage"],
+    member: PERSON,
+    guest: PERSON,
     // A room agent. It reads only channels it was added to and writes only through agent.*
-    // capabilities and messages.write; membership checks in feltkit/_authz.ts apply to it too.
+    // capabilities and messages.write; the channel policy in feltkit/_authz.ts applies to it too.
     agent: ["agents.work", "messages.read", "messages.write", "plans.read", "plans.write", "presence.write", "notifications.send"],
-    admin: ["intelligence.*", "credential.*", "configuration.*", "apikeys.*", "webhooks.*", "jobs.*", "schedules.*", "feltkit.operations.*"],
+    // Operating the deployment (Studio, credentials, jobs). Not a workspace role.
+    operator: ["intelligence.*", "credential.*", "configuration.*", "apikeys.*", "webhooks.*", "jobs.*", "schedules.*", "feltkit.operations.*"],
   },
-  auth: { accounts: { roles: ["member"] } },
-  // Workspace and conversation membership: one policy for every function (feltkit/_authz.ts).
+  auth: {
+    accounts: { roles: ["person"], password: true, magicLink: true, email: { from: "auth@multiplayer.example" } },
+    tenant: { name: "workspace", roles: ["owner", "admin", "member", "guest", "agent"] },
+  },
+  // Conversation policy: one function for every call (feltkit/_authz.ts).
   authorize,
   dev: {
     users: [
-      { id: "ada", name: "Ada Lovelace", roles: ["member", "admin"] },
-      { id: "grace", name: "Grace Hopper", roles: ["member"] },
-      { id: "alan", name: "Alan Turing", roles: ["member"] },
+      { id: "ada", name: "Ada Lovelace", roles: ["person", "operator"] },
+      { id: "grace", name: "Grace Hopper", roles: ["person"] },
+      { id: "alan", name: "Alan Turing", roles: ["person"] },
+      // The room agent's identity in development, so an owner can add it to a workspace (an operator
+      // issues it a session in production: feltkit session create --id assistant --type agent --role agent).
+      { id: "assistant", name: "Assistant", type: "agent", roles: ["agent"] },
     ],
   },
   services: {
     files: true,
-    notifications: { types: ["mention", "invitation.accepted", "agent.replied"] },
+    notifications: { types: ["mention", "agent.replied"] },
   },
 });
 
@@ -62,47 +76,31 @@ export const participants = app.collection("participants", {
   createdAt: s.number(),
 }, { unique: [["principalId"], ["handle"]] });
 
-// ── Tenancy ─────────────────────────────────────────────────────────────────
-
-export const workspaces = app.collection("workspaces", {
-  name: s.string({ minLength: 1, maxLength: 60 }),
-  description: s.optional(s.string({ maxLength: 280 })),
-  createdBy: s.string(),
-  createdAt: s.number(),
-  demo: s.optional(s.boolean()),
-});
+// ── Workspace directory ─────────────────────────────────────────────────────
 
 export const ROLES = ["owner", "admin", "member", "guest", "agent"] as const;
 export type WorkspaceRole = (typeof ROLES)[number];
 
-/** Authoritative: who belongs to a workspace and with which role. */
-export const memberships = app.collection("memberships", {
-  workspaceId: s.ref(workspaces),
-  participantId: s.ref(participants),
-  role: s.enum([...ROLES]),
-  joinedAt: s.number(),
-  invitedBy: s.optional(s.string()),
-}, { unique: [["workspaceId", "participantId"]], indexes: [{ fields: ["participantId"] }] });
+/** Workspace-scoped data: FeltKit stamps the session's workspace into workspaceId and filters every read and write by it. */
+const WS = { tenant: { field: "workspaceId" } } as const;
 
-export const invitations = app.collection("invitations", {
-  workspaceId: s.ref(workspaces),
-  /** The bearer code in the invitation link: 32 random bytes from ctx.crypto.token(), never the record id. */
-  code: s.string({ minLength: 40 }),
-  role: s.enum(["admin", "member", "guest"]),
-  note: s.optional(s.string({ maxLength: 120 })),
-  createdBy: s.string(),
-  createdAt: s.number(),
-  expiresAt: s.number(),
-  status: s.enum(["open", "accepted", "revoked"]),
-  acceptedBy: s.optional(s.string()),
-  acceptedAt: s.optional(s.number()),
-}, { unique: [["code"]], indexes: [{ fields: ["workspaceId"] }] });
+/**
+ * Who has a profile in this workspace: the directory that mentions, direct messages, channel
+ * invitations and presence choose from. Not authority: FeltKit's membership decides who may work in
+ * the workspace. A person is listed when they first work in it (me:ensure); sample personas and the
+ * room agent are listed by the functions that bring them in.
+ */
+export const roster = app.collection("roster", {
+  workspaceId: s.string(),
+  participantId: s.ref(participants),
+  joinedAt: s.number(),
+}, { ...WS, unique: [["workspaceId", "participantId"]] });
 
 // ── Conversations ───────────────────────────────────────────────────────────
 
 /** Channels, direct messages and group conversations are all conversations. */
 export const channels = app.collection("channels", {
-  workspaceId: s.ref(workspaces),
+  workspaceId: s.string(),
   kind: s.enum(["public", "private", "dm", "group"]),
   name: s.string({ minLength: 1, maxLength: 80 }),
   topic: s.optional(s.string({ maxLength: 250 })),
@@ -111,21 +109,21 @@ export const channels = app.collection("channels", {
   createdBy: s.string(),
   createdAt: s.number(),
   isDefault: s.optional(s.boolean()),
-}, { unique: [{ fields: ["workspaceId", "dmKey"], sparse: true }], indexes: [{ fields: ["workspaceId"] }] });
+}, { ...WS, unique: [{ fields: ["workspaceId", "dmKey"], sparse: true }], indexes: [{ fields: ["workspaceId"] }] });
 
 export const channelMembers = app.collection("channelMembers", {
-  workspaceId: s.ref(workspaces),
+  workspaceId: s.string(),
   channelId: s.ref(channels),
   participantId: s.ref(participants),
   /** The highest message seq this member has read. Unread = top-level messages above it. */
   lastReadSeq: s.number(),
   joinedAt: s.number(),
-}, { unique: [["channelId", "participantId"]], indexes: [{ fields: ["participantId", "workspaceId"] }, { fields: ["channelId"] }] });
+}, { ...WS, unique: [["channelId", "participantId"]], indexes: [{ fields: ["participantId", "workspaceId"] }, { fields: ["channelId"] }] });
 
 const AttachmentRef = s.object({ id: s.string(), name: s.string(), size: s.number(), contentType: s.string() });
 
 export const messages = app.collection("messages", {
-  workspaceId: s.ref(workspaces),
+  workspaceId: s.string(),
   channelId: s.ref(channels),
   /** Order within the conversation, from ctx.db.sequence("msg:<channelId>"): no gaps, commit order. */
   seq: s.number(),
@@ -142,23 +140,23 @@ export const messages = app.collection("messages", {
   createdAt: s.number(),
   editedAt: s.optional(s.number()),
   deletedAt: s.optional(s.number()),
-}, { indexes: [{ fields: ["channelId", "seq"] }, { fields: ["rootId"] }, { fields: ["workspaceId"] }] });
+}, { ...WS, indexes: [{ fields: ["channelId", "seq"] }, { fields: ["rootId"] }, { fields: ["workspaceId"] }] });
 
 export const reactions = app.collection("reactions", {
-  workspaceId: s.ref(workspaces),
+  workspaceId: s.string(),
   channelId: s.ref(channels),
   messageId: s.ref(messages),
   participantId: s.ref(participants),
   emoji: s.string({ minLength: 1, maxLength: 16 }),
   createdAt: s.number(),
-}, { unique: [["messageId", "participantId", "emoji"]], indexes: [{ fields: ["channelId"] }] });
+}, { ...WS, unique: [["messageId", "participantId", "emoji"]], indexes: [{ fields: ["channelId"] }] });
 
 /**
  * The binding of a stored file (AppPort Services Files owns the bytes and checksum) to the
  * conversation it was shared in, which is what authorizes reading it. Not a copy of the file.
  */
 export const attachments = app.collection("attachments", {
-  workspaceId: s.ref(workspaces),
+  workspaceId: s.string(),
   channelId: s.ref(channels),
   fileId: s.string(),
   uploaderId: s.ref(participants),
@@ -167,24 +165,24 @@ export const attachments = app.collection("attachments", {
   contentType: s.string(),
   messageId: s.optional(s.string()),
   createdAt: s.number(),
-}, { unique: [["fileId"]], indexes: [{ fields: ["channelId"] }] });
+}, { ...WS, unique: [["fileId"]], indexes: [{ fields: ["channelId"] }] });
 
 // ── Ephemeral (bounded) ─────────────────────────────────────────────────────
 
 export const presence = app.collection("presence", {
-  workspaceId: s.ref(workspaces),
+  workspaceId: s.string(),
   participantId: s.ref(participants),
   lastSeenAt: s.number(),
   status: s.enum(["active", "away"]),
   typingIn: s.optional(s.string()),
   typingUntil: s.optional(s.number()),
-}, { unique: [["workspaceId", "participantId"]] });
+}, { ...WS, unique: [["workspaceId", "participantId"]] });
 
 // ── Agents and the work they produce ────────────────────────────────────────
 
 /** A person asked an agent to do something. The agent works its queue under its own identity. */
 export const agentRequests = app.collection("agentRequests", {
-  workspaceId: s.ref(workspaces),
+  workspaceId: s.string(),
   channelId: s.ref(channels),
   messageId: s.ref(messages),
   agentId: s.ref(participants),
@@ -197,13 +195,13 @@ export const agentRequests = app.collection("agentRequests", {
   replyId: s.optional(s.string()),
   sharedObjectId: s.optional(s.string()),
   error: s.optional(s.string({ maxLength: 500 })),
-}, { indexes: [{ fields: ["agentId", "status"] }] });
+}, { ...WS, indexes: [{ fields: ["agentId", "status"] }] });
 
 const PlanItem = s.object({ title: s.string(), owner: s.optional(s.string()), due: s.optional(s.string()), sourceMessageId: s.optional(s.string()) });
 
 /** Structured objects produced in a conversation (today: project plans). */
 export const sharedObjects = app.collection("sharedObjects", {
-  workspaceId: s.ref(workspaces),
+  workspaceId: s.string(),
   channelId: s.ref(channels),
   kind: s.enum(["project_plan"]),
   title: s.string({ minLength: 1, maxLength: 160 }),
@@ -217,14 +215,14 @@ export const sharedObjects = app.collection("sharedObjects", {
   createdBy: s.ref(participants),
   requestedBy: s.optional(s.string()),
   createdAt: s.number(),
-}, { indexes: [{ fields: ["workspaceId"] }] });
+}, { ...WS, indexes: [{ fields: ["workspaceId"] }] });
 
 /** An auditable record of meaningful changes in a workspace (not every message). */
 export const activity = app.collection("activity", {
-  workspaceId: s.ref(workspaces),
+  workspaceId: s.string(),
   actorId: s.string(),
   type: s.string(),
   summary: s.string({ maxLength: 300 }),
   subjectId: s.optional(s.string()),
   at: s.number(),
-}, { indexes: [{ fields: ["workspaceId", "at"] }] });
+}, { ...WS, indexes: [{ fields: ["workspaceId", "at"] }] });

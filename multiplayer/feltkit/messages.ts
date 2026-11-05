@@ -1,7 +1,7 @@
 import { fail, s } from "@feltdb/feltkit";
-import { agentRequests, app, attachments, memberships, messages, participants, reactions, sharedObjects } from "./app.js";
+import { agentRequests, app, attachments, messages, participants, reactions, sharedObjects } from "./app.js";
 import { readableChannels, loadChannel, loadWorkspace } from "./_authz.js";
-import { insertMessage, joinChannel } from "./_ops.js";
+import { insertMessage, inWorkspace, joinChannel } from "./_ops.js";
 import { mentionedHandles, record } from "./_util.js";
 
 const PAGE = 60;
@@ -103,7 +103,7 @@ export const send = app.mutation({
     const mentioned = [];
     for (const h of mentionedHandles(body)) {
       const [p] = await ctx.db.find(participants, { handle: h });
-      if (p && (await ctx.db.find(memberships, { workspaceId: channel.workspaceId, participantId: p.id })).length) mentioned.push(p);
+      if (p && (await inWorkspace(ctx, p.id))) mentioned.push(p);
     }
     const { id, seq, now } = await insertMessage(ctx, channel, participant.id, {
       text: body, root, mentions: mentioned.map((p) => p.id), sharedObjectId,
@@ -151,8 +151,8 @@ export const remove = app.mutation({
   handler: async (ctx, { messageId }) => {
     const m = await ctx.db.get(messages, messageId);
     if (!m) fail("NOT_FOUND", "Message not found.");
-    const { participant, membership } = await loadChannel(ctx, m.channelId);
-    const moderator = membership.role === "owner" || membership.role === "admin";
+    const { participant, role } = await loadChannel(ctx, m.channelId);
+    const moderator = role === "owner" || role === "admin";
     if (m.authorId !== participant.id && !moderator) fail("FORBIDDEN", "You can only delete your own messages.");
     await ctx.db.patch(messages, messageId, { deletedAt: Date.now() });
     if (m.authorId !== participant.id) await record(ctx, m.workspaceId, participant.id, "message.moderated", `${participant.displayName} deleted a message`, messageId);
@@ -181,12 +181,12 @@ export const react = app.mutation({
 /** Case-insensitive search over the conversations the caller can read (FK-GAP-006: a scan). */
 export const search = app.query({
   access: "messages.read",
-  args: { workspaceId: s.string(), q: s.string({ minLength: 1, maxLength: 200 }) },
-  handler: async (ctx, { workspaceId, q }) => {
-    const { participant, membership } = await loadWorkspace(ctx, workspaceId);
-    const readable = new Map((await readableChannels(ctx, workspaceId, participant.id, membership.role)).map((c) => [c.id, c]));
+  args: { workspaceId: s.optional(s.string()), q: s.string({ minLength: 1, maxLength: 200 }) },
+  handler: async (ctx, { q }) => {
+    const { participant, role } = await loadWorkspace(ctx);
+    const readable = new Map((await readableChannels(ctx, participant.id, role)).map((c) => [c.id, c]));
     const needle = q.trim().toLowerCase();
-    const hits = (await ctx.db.find(messages, { workspaceId }))
+    const hits = (await ctx.db.find(messages, {}))
       .filter((m) => readable.has(m.channelId) && !m.deletedAt && m.text.toLowerCase().includes(needle))
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 50);

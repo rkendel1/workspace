@@ -8,27 +8,33 @@ const Context = s.object({
   messages: s.array(s.object({ id: s.string(), author: s.string(), handle: s.string(), authorKind: s.string(), text: s.string(), createdAt: s.number() })),
 });
 import { me, readableChannels, loadChannel, loadWorkspace } from "./_authz.js";
-import { addToWorkspace, ensureRoomAgent, insertMessage, ROOM_AGENT } from "./_ops.js";
+import { enterWorkspace, ensureRoomAgent, insertMessage, ROOM_AGENT } from "./_ops.js";
 import { record } from "./_util.js";
 
 /**
  * The room agent (FK-GAP-008). People ask it by @mention (messages:send records an agentRequest).
- * The agent is an external worker holding its own agent session (principal ROOM_AGENT); it works
- * its queue through these capabilities, so AppPort role checks and workspace/channel membership
- * apply to it exactly as to a person. It can only read conversations it was brought into.
+ * The agent is an external worker holding its own agent session (principal ROOM_AGENT) and a FeltKit
+ * membership (role "agent") in each workspace it serves; it switches into each and works that
+ * workspace's queue through these capabilities, so roles, tenant scoping and the channel policy apply
+ * to it exactly as to a person. It can only read conversations it was brought into.
  */
 const LEASE_MS = 2 * 60 * 1000;
 
-/** Add the room agent to a workspace (admins). */
+/**
+ * List the room agent in the workspace directory (admins), so people can mention it. Its membership
+ * is FeltKit's: an admin adds it first (client.addMember("assistant", "agent")); without that
+ * membership the agent cannot work here, whatever this directory says.
+ */
 export const add = app.mutation({
   access: "workspaces.write",
-  args: { workspaceId: s.string() },
+  args: { workspaceId: s.optional(s.string()) },
   returns: s.string(),
-  handler: async (ctx, { workspaceId }) => {
-    const { participant } = await loadWorkspace(ctx, workspaceId);
+  handler: async (ctx) => {
+    const { participant, workspaceId } = await loadWorkspace(ctx);
     const agentId = await ensureRoomAgent(ctx);
-    await addToWorkspace(ctx, workspaceId, agentId, "agent", participant.id);
-    await record(ctx, workspaceId, participant.id, "agent.added", `${participant.displayName} added @${ROOM_AGENT} to the workspace`, agentId);
+    if (await enterWorkspace(ctx, workspaceId, agentId, "agent")) {
+      await record(ctx, workspaceId, participant.id, "agent.added", `${participant.displayName} added @${ROOM_AGENT} to the workspace`, agentId);
+    }
     return agentId;
   },
 });
@@ -40,7 +46,7 @@ async function myRequest(ctx: any, requestId: string) {
   return { agent, req };
 }
 
-/** The calling agent's open requests (pending, or working with an expired lease). */
+/** The calling agent's open requests in the session's workspace (pending, or working with an expired lease). */
 export const pending = app.query({
   access: "agents.work",
   returns: Pending,
@@ -48,7 +54,7 @@ export const pending = app.query({
   handler: async (ctx) => {
     const principal = ctx.auth.requirePrincipal();
     const [agent] = await ctx.db.find(participants, { principalId: principal.id });
-    if (!agent) return [];
+    if (!agent || !ctx.auth.tenant) return [];
     const now = Date.now();
     const open = [
       ...(await ctx.db.find(agentRequests, { agentId: agent.id, status: "pending" })),
@@ -181,11 +187,11 @@ export const plan = app.query({
 /** Plans in the conversations the caller can read. */
 export const plans = app.query({
   access: "plans.read",
-  args: { workspaceId: s.string() },
-  handler: async (ctx, { workspaceId }) => {
-    const { participant, membership } = await loadWorkspace(ctx, workspaceId);
-    const readable = new Set((await readableChannels(ctx, workspaceId, participant.id, membership.role)).map((c) => c.id));
-    return (await ctx.db.find(sharedObjects, { workspaceId }, { orderBy: [{ field: "createdAt", direction: "desc" }] }))
+  args: { workspaceId: s.optional(s.string()) },
+  handler: async (ctx) => {
+    const { participant, role } = await loadWorkspace(ctx);
+    const readable = new Set((await readableChannels(ctx, participant.id, role)).map((c) => c.id));
+    return (await ctx.db.find(sharedObjects, {}, { orderBy: [{ field: "createdAt", direction: "desc" }] }))
       .filter((o) => readable.has(o.channelId))
       .map((o) => ({ id: o.id, channelId: o.channelId, title: o.title, tasks: o.tasks.length, createdAt: o.createdAt }));
   },

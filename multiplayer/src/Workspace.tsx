@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { useFeltKit, useMutation, useQueryState } from "@feltdb/feltkit/react";
+import { AccountSettings, AuthNotices, InvitationsPanel, TenantSettings, TenantSwitcher, VerifyEmailBanner, useAuth, useFeltKit, useMutation, useQueryState, useTenant } from "@feltdb/feltkit/react";
 import { api } from "../feltkit/_generated/api";
 import { Logo } from "./App";
 import { ThemeToggle } from "./theme";
@@ -7,18 +7,23 @@ import { ago, Avatar, bytes, clock, day, Modal, useNow, type useToasts } from ".
 
 type Toasts = ReturnType<typeof useToasts>;
 type Me = { id: string; displayName: string; handle: string };
-type Member = { participantId: string; handle: string; displayName: string; title: string | null; kind: string; agentType: string | null; persona: boolean; role: string; lastSeenAt: number | null; status: string | null; typingIn: string | null; typingUntil: number | null };
+type Member = { participantId: string; handle: string; displayName: string; title: string | null; kind: string; agentType: string | null; persona: boolean; lastSeenAt: number | null; status: string | null; typingIn: string | null; typingUntil: number | null };
 type Panel = { kind: "details" } | { kind: "thread"; rootId: string } | { kind: "plan"; id: string } | { kind: "members" } | { kind: "activity" } | { kind: "search"; q: string } | { kind: "inbox" } | null;
 
 const EMOJI = ["👍", "❤️", "😂", "🎉", "🚀", "👀", "✅", "🙏"];
 const ONLINE_MS = 60_000;
 
-export function WorkspaceView(props: {
-  workspaceId: string; me: Me; workspaces: Array<{ id: string; name: string; demo: boolean }>; live: boolean;
-  devUsers: Array<{ id: string; name: string }>; principalId: string;
-  onSwitchUser: (id: string) => void; onSwitchWorkspace: (id: string | null) => void; onSignOut: () => void; toasts: Toasts;
-}) {
+/**
+ * The session's workspace. `workspaceId` is FeltKit's current tenant (useTenant().current.id): the
+ * server takes the workspace from the session and refuses any other id, so it is passed only where a
+ * function still has the argument. Switching, members, invitations and the account are FeltKit's screens.
+ */
+export function WorkspaceView(props: { workspaceId: string; me: Me; live: boolean; toasts: Toasts }) {
   const { workspaceId, me, toasts } = props;
+  const auth = useAuth();
+  const tenant = useTenant();
+  const canManage = Boolean(tenant.settings?.can?.manageMembers);
+  const [view, setView] = useState<"chat" | "settings" | "account">("chat");
   const ws = useQueryState(api.workspaces.get, { workspaceId });
   const chans = useQueryState(api.channels.list, { workspaceId });
   const [channelId, setChannelId] = useState<string | null>(() => sessionStorage.getItem(`mp:ch:${workspaceId}`));
@@ -32,7 +37,11 @@ export function WorkspaceView(props: {
 
   // Presence: a heartbeat every 20 s and on visibility changes (FK-GAP-004 explains why it is a write).
   useEffect(() => {
-    const beat = () => void heartbeat({ workspaceId, status: document.visibilityState === "visible" ? "active" : "away" }).catch(() => undefined);
+    // A refused heartbeat means the membership ended or changed (FeltKit sends no change event for
+    // memberships, so open queries learn it only when workspace data next changes): ask FeltKit again.
+    const beat = () => void heartbeat({ workspaceId, status: document.visibilityState === "visible" ? "active" : "away" }).catch((e) => {
+      if (e?.code === "FORBIDDEN" || e?.code === "NOT_FOUND") { auth.refresh(); tenant.refresh(); }
+    });
     beat();
     const t = setInterval(beat, 20_000);
     document.addEventListener("visibilitychange", beat);
@@ -55,14 +64,15 @@ export function WorkspaceView(props: {
   }, [chans.data, channelId]);
   useEffect(() => { if (channelId) sessionStorage.setItem(`mp:ch:${workspaceId}`, channelId); }, [channelId]);
 
-  // Removed from the workspace while looking at it: go back to the picker.
+  // Removed from the workspace (or demoted) while looking at it: FeltKit's session has no workspace
+  // role here any more. Ask FeltKit again; the shell then shows the remaining workspaces.
   useEffect(() => {
-    if (ws.error?.code === "NOT_FOUND") { toasts.error("You no longer have access to that workspace."); props.onSwitchWorkspace(null); }
+    if (ws.error?.code === "NOT_FOUND" || ws.error?.code === "FORBIDDEN") { toasts.error("You no longer have access to that workspace."); auth.refresh(); tenant.refresh(); }
   }, [ws.error]);
 
   const members = ws.data?.members ?? [];
   const online = useCallback((m: Member) => m.kind === "agent" ? true : m.lastSeenAt !== null && now + skew.current - m.lastSeenAt < ONLINE_MS, [now]);
-  const open = (id: string) => { setChannelId(id); setPane("chat"); if (panel?.kind === "thread" || panel?.kind === "details") setPanel(null); };
+  const open = (id: string) => { setView("chat"); setChannelId(id); setPane("chat"); if (panel?.kind === "thread" || panel?.kind === "details") setPanel(null); };
   const openPanel = (p: Panel) => { setPanel(p); if (p) setPane("panel"); };
   const totalUnread = (chans.data ?? []).reduce((n, c) => n + c.unread, 0);
 
@@ -70,33 +80,31 @@ export function WorkspaceView(props: {
     document.title = `${totalUnread ? `(${totalUnread}) ` : ""}${ws.data?.name ?? "Multiplayer"} · Multiplayer`;
   }, [totalUnread, ws.data?.name]);
 
-  if (ws.error && ws.error.code !== "NOT_FOUND") return <div className="center"><div className="card narrow error-text" role="alert">{ws.error.message}</div></div>;
+  if (ws.error && ws.error.code !== "NOT_FOUND" && ws.error.code !== "FORBIDDEN") return <div className="center"><div className="card narrow error-text" role="alert">{ws.error.message}</div></div>;
   const isAdmin = ws.data?.myRole === "owner" || ws.data?.myRole === "admin";
   const hasAgent = members.some((m) => m.handle === "assistant");
 
   return (
     <div className={`app pane-${pane} ${panel ? "with-panel" : ""}`}>
-      <TopBar {...props} wsName={ws.data?.name ?? "…"} onSearch={(q) => openPanel({ kind: "search", q })} onInbox={() => openPanel({ kind: "inbox" })} onNav={() => setPane("nav")} />
+      <TopBar live={props.live} wsName={ws.data?.name ?? "…"} onSearch={(q) => { setView("chat"); openPanel({ kind: "search", q }); }} onInbox={() => { setView("chat"); openPanel({ kind: "inbox" }); }} onNav={() => setPane("nav")} onAccount={() => { setView("account"); setPane("chat"); }} />
       <nav className="sidebar" aria-label="Conversations">
         <div className="ws-head">
-          <button className="ws-name" onClick={() => props.onSwitchWorkspace(null)} title="Switch workspace" aria-label={`Switch workspace (${ws.data?.name ?? ""})`}>
-            <span className="ws-icon">{ws.data?.name[0] ?? "·"}</span>
-            <span className="truncate">{ws.data?.name ?? "Loading…"}</span>
-            <span aria-hidden className="chev">⌄</span>
-          </button>
+          <span className="ws-icon">{ws.data?.name[0] ?? "·"}</span>
+          <TenantSwitcher className="ws-switcher" onSwitched={() => setView("chat")} />
           {ws.data && <span className="role-tag">{ws.data.myRole}</span>}
         </div>
         <div className="side-actions">
-          {ws.data?.myRole !== "guest" && <button className="side-btn" onClick={() => setModal("invite")}>＋ Invite people</button>}
-          {isAdmin && !hasAgent && <AddAgentButton workspaceId={workspaceId} toasts={toasts} />}
-          <button className="side-btn" onClick={() => openPanel({ kind: "members" })}>👥 Members · {members.length}</button>
-          {ws.data?.myRole !== "guest" && <button className="side-btn" onClick={() => openPanel({ kind: "activity" })}>🕘 Activity</button>}
+          {canManage && <button className="side-btn" onClick={() => setModal("invite")}>＋ Invite people</button>}
+          {isAdmin && !hasAgent && <AddAgentButton toasts={toasts} />}
+          <button className="side-btn" onClick={() => { setView("chat"); openPanel({ kind: "members" }); }}>👥 Members · {members.length}</button>
+          {ws.data?.myRole !== "guest" && <button className="side-btn" onClick={() => { setView("chat"); openPanel({ kind: "activity" }); }}>🕘 Activity</button>}
+          <button className="side-btn" aria-current={view === "settings" ? "page" : undefined} onClick={() => { setView("settings"); setPane("chat"); }}>⚙ Workspace settings</button>
         </div>
         {!chans.data ? <SidebarSkeleton /> : (
           <>
             <Section title="Channels" action={ws.data?.myRole !== "guest" ? { label: "Create a channel", onClick: () => setModal("channel") } : undefined}>
               {chans.data.filter((c) => c.kind === "public" || c.kind === "private").map((c) => (
-                <ChanRow key={c.id} active={c.id === channelId} onClick={() => open(c.id)} unread={c.isMember ? c.unread : 0} mentions={c.mentions} muted={!c.isMember}
+                <ChanRow key={c.id} active={view === "chat" && c.id === channelId} onClick={() => open(c.id)} unread={c.isMember ? c.unread : 0} mentions={c.mentions} muted={!c.isMember}
                   icon={c.kind === "private" ? "🔒" : "#"} label={c.name} />
               ))}
             </Section>
@@ -104,7 +112,7 @@ export function WorkspaceView(props: {
               {chans.data.filter((c) => c.kind === "dm" || c.kind === "group").map((c) => {
                 const other = members.find((m) => m.participantId === c.others[0]?.id);
                 return (
-                  <ChanRow key={c.id} active={c.id === channelId} onClick={() => open(c.id)} unread={c.unread} mentions={c.mentions}
+                  <ChanRow key={c.id} active={view === "chat" && c.id === channelId} onClick={() => open(c.id)} unread={c.unread} mentions={c.mentions}
                     icon={c.kind === "group" ? <span className="group-count">{c.others.length + 1}</span> : <Avatar name={c.others[0]?.displayName ?? me.displayName} kind={c.others[0]?.kind} size={20} online={other ? online(other) : null} />}
                     label={c.title} />
                 );
@@ -115,15 +123,24 @@ export function WorkspaceView(props: {
         )}
       </nav>
 
-      <main className="main" aria-label="Conversation">
-        {channelId ? (
+      <main className="main" aria-label={view === "chat" ? "Conversation" : view === "settings" ? "Workspace settings" : "Account"}>
+        <AuthNotices className="notice" />
+        <VerifyEmailBanner className="notice" />
+        {view !== "chat" ? (
+          <div className="settings-view">
+            <header className="conv-head"><button className="icon-btn back" onClick={() => setPane("nav")} aria-label="Back to conversations">‹</button><h1>{view === "settings" ? "Workspace settings" : "Your account"}</h1><button className="ghost small" onClick={() => setView("chat")}>Back to conversations</button></header>
+            <div className="settings-body">
+              {view === "settings" ? <>{isAdmin && !hasAgent && <section className="fk-section agent-box"><h3>Room agent</h3><p className="muted small">@assistant summarizes conversations and writes project plans. It joins as a member with the agent role and reads only conversations it is brought into.</p><AddAgentButton toasts={toasts} /></section>}<TenantSettings /></> : <AccountSettings />}
+            </div>
+          </div>
+        ) : channelId ? (
           <Conversation key={channelId} channelId={channelId} me={me} members={members} now={now + skew.current} toasts={toasts}
             onOpenThread={(rootId) => openPanel({ kind: "thread", rootId })} onOpenPlan={(id) => openPanel({ kind: "plan", id })}
             onDetails={() => openPanel({ kind: "details" })} onAddMembers={() => setModal("addMembers")} onBack={() => setPane("nav")} onTyping={(typing) => void heartbeat({ workspaceId, status: "active", ...(typing ? { typingIn: channelId } : {}) }).catch(() => undefined)} />
         ) : chans.data ? <Empty title="No conversations" body="Create a channel to get started." /> : <div className="center muted" role="status">Loading…</div>}
       </main>
 
-      {panel && (
+      {panel && view === "chat" && (
         <aside className="panel" aria-label="Details">
           <PanelView panel={panel} channelId={channelId} workspaceId={workspaceId} me={me} members={members} myRole={ws.data?.myRole ?? "guest"} online={online} toasts={toasts} now={now + skew.current}
             onClose={() => { setPanel(null); setPane("chat"); }} onOpenThread={(rootId) => openPanel({ kind: "thread", rootId })} onOpenPlan={(id) => openPanel({ kind: "plan", id })}
@@ -134,13 +151,16 @@ export function WorkspaceView(props: {
 
       {modal === "channel" && <CreateChannel workspaceId={workspaceId} onClose={() => setModal(null)} onCreated={(id) => { setModal(null); open(id); }} toasts={toasts} />}
       {modal === "dm" && <NewConversation workspaceId={workspaceId} me={me} members={members} onClose={() => setModal(null)} onOpen={(id) => { setModal(null); open(id); }} toasts={toasts} />}
-      {modal === "invite" && <Invite workspaceId={workspaceId} myRole={ws.data?.myRole ?? "member"} onClose={() => setModal(null)} toasts={toasts} />}
+      {modal === "invite" && <Modal title="Invite people" onClose={() => setModal(null)} wide><InvitationsPanel /></Modal>}
       {modal === "addMembers" && channelId && <AddMembers channelId={channelId} members={members} onClose={() => setModal(null)} toasts={toasts} />}
     </div>
   );
 }
 
-function TopBar(props: { wsName: string; live: boolean; devUsers: Array<{ id: string; name: string }>; principalId: string; onSwitchUser: (id: string) => void; onSignOut: () => void; onSearch: (q: string) => void; onInbox: () => void; onNav: () => void }) {
+function TopBar(props: { wsName: string; live: boolean; onSearch: (q: string) => void; onInbox: () => void; onNav: () => void; onAccount: () => void }) {
+  const auth = useAuth();
+  const client = useFeltKit();
+  const devUsers = auth.session?.devUsers ?? [];
   const [q, setQ] = useState("");
   const inbox = useQueryState(api.inbox.list, { unread: true });
   const n = inbox.data?.length ?? 0;
@@ -156,12 +176,13 @@ function TopBar(props: { wsName: string; live: boolean; devUsers: Array<{ id: st
           <span className="dot" /> <span className="live-label">{props.live ? "Live" : "Reconnecting"}</span>
         </span>
         <button className="icon-btn bell" onClick={props.onInbox} aria-label={`Notifications, ${n} unread`}>🔔{n > 0 && <span className="badge">{n}</span>}</button>
-        {props.devUsers.length > 0 ? (
-          <select className="identity" value={props.principalId} onChange={(e) => props.onSwitchUser(e.target.value)} aria-label="Signed in as (development)">
-            {props.devUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        {devUsers.length > 0 && devUsers.some((u) => u.id === auth.user?.id) && (
+          <select className="identity" value={auth.user?.id} onChange={(e) => void (e.target.value ? client.signInAsDevUser(e.target.value) : auth.signOut())} aria-label="Signed in as (development)">
+            {devUsers.filter((u) => u.type !== "agent").map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             <option value="">Sign out</option>
           </select>
-        ) : <button className="ghost" onClick={props.onSignOut}>Sign out</button>}
+        )}
+        <button className="ghost account-btn" onClick={props.onAccount} aria-label="Account">{auth.user?.displayName?.split(" ")[0] ?? "Account"}</button>
         <ThemeToggle />
       </div>
     </header>
@@ -197,9 +218,21 @@ function Empty({ title, body, children }: { title: string; body: string; childre
   return <div className="empty"><h3>{title}</h3><p className="muted">{body}</p>{children}</div>;
 }
 
-function AddAgentButton({ workspaceId, toasts }: { workspaceId: string; toasts: Toasts }) {
-  const add = useMutation(api.agents.add);
-  return <button className="side-btn" onClick={() => void add({ workspaceId }).then(() => toasts.info("@assistant joined. Mention it in any conversation."), toasts.error)}>🤖 Add @assistant</button>;
+/**
+ * Add the room agent: a FeltKit member with the role "agent" (FeltKit adds agent identities directly;
+ * people are invited), then listed in this workspace's directory so people can mention it.
+ */
+function AddAgentButton({ toasts }: { toasts: Toasts }) {
+  const client = useFeltKit();
+  const list = useMutation(api.agents.add);
+  const add = async () => {
+    try {
+      await client.addMember("assistant", "agent").catch((e) => { if (e?.code !== "CONFLICT") throw e; });
+      await list({});
+      toasts.info("@assistant joined. Mention it in any conversation.");
+    } catch (e) { toasts.error(e); }
+  };
+  return <button className="side-btn" onClick={() => void add()}>🤖 Add @assistant</button>;
 }
 
 // ── Conversation ────────────────────────────────────────────────────────────
@@ -560,10 +593,8 @@ function Details(props: { channelId: string; me: Me; members: Member[]; online: 
   );
 }
 
-function Members(props: { workspaceId: string; me: Me; members: Member[]; myRole: string; online: (m: Member) => boolean; toasts: Toasts; now: number }) {
-  const setRole = useMutation(api.workspaces.setRole);
-  const remove = useMutation(api.workspaces.removeMember);
-  const isAdmin = props.myRole === "owner" || props.myRole === "admin";
+/** Who is here and who is around (the workspace directory, with presence). Roles, removal and leaving: Workspace settings (FeltKit). */
+function Members(props: { me: Me; members: Member[]; online: (m: Member) => boolean; now: number }) {
   const sorted = [...props.members].sort((a, b) => Number(props.online(b)) - Number(props.online(a)));
   return (
     <ul className="people members">
@@ -574,14 +605,6 @@ function Members(props: { workspaceId: string; me: Me; members: Member[]; myRole
             <strong>{m.displayName}</strong>{m.participantId === props.me.id && <span className="muted small"> (you)</span>} <span className="muted small">@{m.handle}</span><br />
             <span className="muted small">{m.kind === "agent" ? `${m.agentType ?? ""} agent` : m.title ?? ""}{m.persona ? " · sample" : ""} · {m.kind === "agent" ? "always on" : props.online(m) ? (m.status === "away" ? "away" : "active") : m.lastSeenAt ? `seen ${ago(m.lastSeenAt, props.now)}` : "offline"}</span>
           </span>
-          {isAdmin && m.participantId !== props.me.id && m.role !== "owner" && m.role !== "agent" ? (
-            <select value={m.role} aria-label={`Role of ${m.displayName}`} onChange={(e) => void setRole({ workspaceId: props.workspaceId, participantId: m.participantId, role: e.target.value as "admin" | "member" | "guest" }).catch(props.toasts.error)}>
-              {props.myRole === "owner" && <option value="admin">admin</option>}{m.role === "admin" && props.myRole !== "owner" && <option value="admin">admin</option>}
-              <option value="member">member</option><option value="guest">guest</option>
-            </select>
-          ) : <span className="role-tag">{m.role}</span>}
-          {(isAdmin && m.participantId !== props.me.id && m.role !== "owner") && <button className="icon-btn small" title={`Remove ${m.displayName}`} aria-label={`Remove ${m.displayName}`} onClick={() => confirm(`Remove ${m.displayName} from the workspace?`) && void remove({ workspaceId: props.workspaceId, participantId: m.participantId }).catch(props.toasts.error)}>✕</button>}
-          {m.participantId === props.me.id && m.role !== "owner" && <button className="ghost small danger" onClick={() => confirm("Leave this workspace?") && void remove({ workspaceId: props.workspaceId, participantId: m.participantId }).catch(props.toasts.error)}>Leave</button>}
         </li>
       ))}
     </ul>
@@ -685,34 +708,6 @@ function NewConversation({ workspaceId, me, members, onClose, onOpen, toasts }: 
   );
 }
 
-function Invite({ workspaceId, myRole, onClose, toasts }: { workspaceId: string; myRole: string; onClose: () => void; toasts: Toasts }) {
-  const create = useMutation(api.invitations.create);
-  const revoke = useMutation(api.invitations.revoke);
-  const list = useQueryState(api.invitations.list, { workspaceId });
-  const [role, setRole] = useState<"admin" | "member" | "guest">("member");
-  const [note, setNote] = useState("");
-  const [link, setLink] = useState<string | null>(null);
-  const linkFor = (id: string) => `${location.origin}/?invite=${id}`;
-  const submit = async (e: FormEvent) => { e.preventDefault(); try { const r = await create({ workspaceId, role, ...(note.trim() ? { note } : {}) }); setLink(linkFor(r.code)); setNote(""); } catch (err) { toasts.error(err); } };
-  return (
-    <Modal title="Invite people" onClose={onClose} wide>
-      <form className="stack" onSubmit={submit}>
-        <div className="row">
-          <label className="field grow"><span>Who is it for? <span className="muted">(a note for you)</span></span><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. alex@acme.com" maxLength={120} /></label>
-          <label className="field"><span>Role</span><select value={role} onChange={(e) => setRole(e.target.value as typeof role)}>{(myRole === "owner" || myRole === "admin") && <option value="admin">Admin</option>}<option value="member">Member</option><option value="guest">Guest</option></select></label>
-        </div>
-        <button type="submit">Create invitation link</button>
-      </form>
-      {link && <div className="invite-link"><input readOnly value={link} aria-label="Invitation link" onFocus={(e) => e.currentTarget.select()} /><button className="secondary" onClick={() => void navigator.clipboard?.writeText(link).then(() => toasts.info("Link copied."), () => undefined)}>Copy</button></div>}
-      <p className="muted small">Links work once and expire after 7 days. Anyone holding a link can join, so share it privately.</p>
-      <h3>Invitations</h3>
-      {!list.data ? <p className="muted">Loading…</p> : !list.data.length ? <p className="muted small">None yet.</p> : (
-        <ul className="invites">{list.data.map((i) => <li key={i.id}><span className={`status ${i.status}`}>{i.status}</span><span className="grow">{i.role}{i.note ? ` · ${i.note}` : ""} <span className="muted small">· {ago(i.createdAt)}</span></span>{i.status === "open" && i.code && <><button className="ghost small" onClick={() => void navigator.clipboard?.writeText(linkFor(i.code!)).then(() => toasts.info("Link copied."), () => undefined)}>Copy link</button><button className="ghost small danger" onClick={() => void revoke({ invitationId: i.id }).catch(toasts.error)}>Revoke</button></>}</li>)}</ul>
-      )}
-    </Modal>
-  );
-}
-
 function AddMembers({ channelId, members, onClose, toasts }: { channelId: string; members: Member[]; onClose: () => void; toasts: Toasts }) {
   const ch = useQueryState(api.channels.get, { channelId });
   const add = useMutation(api.channels.addMembers);
@@ -723,7 +718,7 @@ function AddMembers({ channelId, members, onClose, toasts }: { channelId: string
     <Modal title={`Add people to ${ch.data?.kind === "group" ? "this conversation" : "#" + (ch.data?.name ?? "")}`} onClose={onClose}>
       <div className="stack">
         {candidates.length === 0 ? <p className="muted">Everyone in the workspace is already here.</p> : (
-          <ul className="people pick">{candidates.map((m) => <li key={m.participantId}><label><input type="checkbox" checked={picked.includes(m.participantId)} onChange={(e) => setPicked((x) => e.target.checked ? [...x, m.participantId] : x.filter((y) => y !== m.participantId))} /> <Avatar name={m.displayName} kind={m.kind} size={24} /> {m.displayName} <span className="muted small">{m.kind === "agent" ? "agent" : m.role}</span></label></li>)}</ul>
+          <ul className="people pick">{candidates.map((m) => <li key={m.participantId}><label><input type="checkbox" checked={picked.includes(m.participantId)} onChange={(e) => setPicked((x) => e.target.checked ? [...x, m.participantId] : x.filter((y) => y !== m.participantId))} /> <Avatar name={m.displayName} kind={m.kind} size={24} /> {m.displayName} <span className="muted small">{m.kind === "agent" ? "agent" : m.title ?? ""}</span></label></li>)}</ul>
         )}
         <button disabled={!picked.length} onClick={() => void add({ channelId, participantIds: picked }).then(onClose, toasts.error)}>Add {picked.length || ""}</button>
       </div>

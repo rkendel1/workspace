@@ -5,10 +5,10 @@ import { loadWorkspace } from "./_authz.js";
 /** The workspace's audit trail of meaningful changes, newest first. Members only. */
 export const list = app.query({
   access: "activity.read",
-  args: { workspaceId: s.string() },
-  handler: async (ctx, { workspaceId }) => {
-    await loadWorkspace(ctx, workspaceId);
-    const page = await ctx.db.query(activity, { where: [{ field: "workspaceId", eq: workspaceId }], orderBy: [{ field: "at", direction: "desc" }], limit: 100 });
+  args: { workspaceId: s.optional(s.string()) },
+  handler: async (ctx) => {
+    await loadWorkspace(ctx);
+    const page = await ctx.db.query(activity, { where: [], orderBy: [{ field: "at", direction: "desc" }], limit: 100 });
     const names = new Map<string, string>();
     const out = [];
     for (const a of page.records) {

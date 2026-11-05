@@ -1,48 +1,56 @@
 import { s } from "@feltdb/feltkit";
-import { app, memberships, participants, workspaces } from "./app.js";
+import { app, participants } from "./app.js";
 import { me as requireMe } from "./_authz.js";
-import { baseHandle } from "./_util.js";
+import { enterWorkspace, ensureDefaultChannels } from "./_ops.js";
+import { baseHandle, record } from "./_util.js";
 
 const Participant = s.doc(participants);
 
-/** The caller's profile and workspaces, or null before the first me:ensure. */
+/** The caller's profile, or null before the first me:ensure. Workspaces are FeltKit's (GET /api/tenants). */
 export const get = app.query({
   access: "authenticated",
   handler: async (ctx) => {
     const principal = ctx.auth.requirePrincipal();
     const [p] = await ctx.db.find(participants, { principalId: principal.id });
-    if (!p) return null;
-    const mine = await ctx.db.find(memberships, { participantId: p.id });
-    const list = [];
-    for (const m of mine) {
-      const w = await ctx.db.get(workspaces, m.workspaceId);
-      if (w) list.push({ id: w.id, name: w.name, description: w.description ?? null, demo: Boolean(w.demo), role: m.role });
-    }
-    list.sort((a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1));
-    return { participant: p, workspaces: list };
+    return p ? { participant: p } : null;
   },
 });
 
-/** Create the caller's participant on first use. Idempotent. */
+/**
+ * Create the caller's participant on first use and, in a session working in a workspace, enter it:
+ * the workspace's default channels exist, and the caller is in its directory (and its default
+ * channels unless a guest or an agent). Idempotent; clients call it after every switch.
+ */
 export const ensure = app.mutation({
   access: "authenticated",
   args: { displayName: s.optional(s.string({ minLength: 1, maxLength: 80 })) },
   returns: Participant,
   handler: async (ctx, { displayName }) => {
     const principal = ctx.auth.requirePrincipal();
-    const [existing] = await ctx.db.find(participants, { principalId: principal.id });
-    if (existing) return existing;
-    const name = displayName?.trim() || principal.displayName || principal.id;
-    const handle = await freeHandle(ctx, baseHandle(principal.type === "user" && principal.id.includes("@") ? principal.id : name));
-    const id = await ctx.db.insert(participants, {
-      principalId: principal.id,
-      kind: principal.type === "agent" ? "agent" : "human",
-      ...(principal.type === "agent" ? { agentType: "application" as const } : {}),
-      handle,
-      displayName: name,
-      createdAt: Date.now(),
-    });
-    return (await ctx.db.get(participants, id))!;
+    let [p] = await ctx.db.find(participants, { principalId: principal.id });
+    if (!p) {
+      const name = displayName?.trim() || principal.displayName || principal.id;
+      const handle = await freeHandle(ctx, baseHandle(principal.type === "user" && principal.id.includes("@") ? principal.id : name));
+      const id = await ctx.db.insert(participants, {
+        principalId: principal.id,
+        kind: principal.type === "agent" ? "agent" : "human",
+        ...(principal.type === "agent" ? { agentType: "application" as const } : {}),
+        handle,
+        displayName: name,
+        createdAt: Date.now(),
+      });
+      p = (await ctx.db.get(participants, id))!;
+    }
+    const tenant = app.tenant(ctx);
+    if (tenant) {
+      if (tenant.role !== "agent" && tenant.role !== "guest" && (await ensureDefaultChannels(ctx, tenant.id, p.id))) {
+        await record(ctx, tenant.id, p.id, "workspace.created", `${p.displayName} set up ${tenant.name}`, tenant.id);
+      }
+      if (await enterWorkspace(ctx, tenant.id, p.id, tenant.role)) {
+        await record(ctx, tenant.id, p.id, "membership.joined", `${p.displayName} joined as ${tenant.role}`, p.id);
+      }
+    }
+    return p;
   },
 });
 

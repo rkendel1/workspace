@@ -1,0 +1,141 @@
+{
+  "base": "http://localhost:3217",
+  "at": "2026-11-05T18:49:40.235Z",
+  "passed": 20,
+  "failed": 0,
+  "results": [
+    {
+      "name": "sign-in screen (FeltKit SignIn)",
+      "ok": true,
+      "ms": 1360
+    },
+    {
+      "name": "ada signs in (development identity) and opens a fresh sample workspace",
+      "ok": true,
+      "ms": 1302
+    },
+    {
+      "name": "ada invites grace by e-mail (FeltKit InvitationsPanel); the invitation is e-mailed",
+      "ok": true,
+      "ms": 815,
+      "detail": {
+        "link": "http://localhost:3217/#feltkit-invitation=<token>"
+      }
+    },
+    {
+      "name": "grace opens the link, signs in with an e-mailed code, and joins (FeltKit AcceptInvitation)",
+      "ok": true,
+      "ms": 2187,
+      "detail": {
+        "code": "<8 digits from the dev inbox>"
+      }
+    },
+    {
+      "name": "real-time message delivery (no refresh)",
+      "ok": true,
+      "ms": 240,
+      "detail": {
+        "latencyMs": 240
+      }
+    },
+    {
+      "name": "typing indicator",
+      "ok": true,
+      "ms": 1299,
+      "detail": {
+        "latencyMs": 680
+      }
+    },
+    {
+      "name": "presence: grace shows active in ada's member list",
+      "ok": true,
+      "ms": 285
+    },
+    {
+      "name": "presence: going away is reflected",
+      "ok": true,
+      "ms": 107
+    },
+    {
+      "name": "reactions propagate",
+      "ok": true,
+      "ms": 142,
+      "detail": {
+        "latencyMs": 62
+      }
+    },
+    {
+      "name": "thread replies propagate",
+      "ok": true,
+      "ms": 497,
+      "detail": {
+        "latencyMs": 131
+      }
+    },
+    {
+      "name": "unread counts update live",
+      "ok": true,
+      "ms": 112,
+      "detail": {
+        "latencyMs": 61
+      }
+    },
+    {
+      "name": "channel membership: grace is added to a new private channel live",
+      "ok": true,
+      "ms": 559,
+      "detail": {
+        "latencyMs": 74
+      }
+    },
+    {
+      "name": "agent: mention, plan persisted, reply visible to both sessions",
+      "ok": true,
+      "ms": 948,
+      "detail": {
+        "agentRoundTripMs": 186
+      }
+    },
+    {
+      "name": "reconnection: offline session catches up from durable state",
+      "ok": true,
+      "ms": 12413,
+      "detail": {
+        "catchUpAfterReconnectMs": 9327
+      }
+    },
+    {
+      "name": "durable recovery: a fresh page load shows the authoritative state (cookie session survives)",
+      "ok": true,
+      "ms": 287
+    },
+    {
+      "name": "side-by-side screenshot of both sessions",
+      "ok": true,
+      "ms": 1286
+    },
+    {
+      "name": "account screen (FeltKit AccountSettings): grace's account and sessions",
+      "ok": true,
+      "ms": 295
+    },
+    {
+      "name": "workspaces: create a second one and switch back (FeltKit TenantSwitcher)",
+      "ok": true,
+      "ms": 832
+    },
+    {
+      "name": "workspace settings (FeltKit TenantSettings): members, role change, removal takes effect",
+      "ok": true,
+      "ms": 20478,
+      "detail": {
+        "removedMemberNoticedMs": 18933
+      }
+    },
+    {
+      "name": "light/dark/mobile screenshots",
+      "ok": true,
+      "ms": 2466
+    }
+  ]
+}

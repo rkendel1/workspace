@@ -9,16 +9,13 @@ import { loadChannel, loadWorkspace } from "./_authz.js";
  */
 export const heartbeat = app.mutation({
   access: "presence.write",
-  args: { workspaceId: s.string(), status: s.enum(["active", "away"]), typingIn: s.optional(s.string()) },
-  handler: async (ctx, { workspaceId, status, typingIn }) => {
-    const { participant } = await loadWorkspace(ctx, workspaceId);
-    if (typingIn) {
-      const { channel } = await loadChannel(ctx, typingIn);
-      if (channel.workspaceId !== workspaceId) return;
-    }
+  args: { workspaceId: s.optional(s.string()), status: s.enum(["active", "away"]), typingIn: s.optional(s.string()) },
+  handler: async (ctx, { status, typingIn }) => {
+    const { participant, workspaceId } = await loadWorkspace(ctx);
+    if (typingIn) await loadChannel(ctx, typingIn);
     const now = Date.now();
     const fields = { lastSeenAt: now, status, typingIn: typingIn || undefined, typingUntil: typingIn ? now + 5000 : undefined };
-    const [existing] = await ctx.db.find(presence, { workspaceId, participantId: participant.id });
+    const [existing] = await ctx.db.find(presence, { participantId: participant.id });
     if (existing) await ctx.db.patch(presence, existing.id, fields);
     else await ctx.db.insert(presence, { workspaceId, participantId: participant.id, ...fields });
   },

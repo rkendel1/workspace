@@ -1,13 +1,15 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { api } from "../feltkit/_generated/api.js";
-import { AGENT, setup } from "./helpers.js";
+import { ADA, actor, addAgent, AGENT, GRACE, MALLORY, serve, setup, wtest as test } from "./helpers.js";
 
 test("create workspace: owner, default channels, activity", async () => {
   const { t, ada, ws } = await setup();
   try {
-    const me = await ada.query(api.me.get);
-    assert.equal(me!.workspaces.find((w: any) => w.id === ws)!.role, "owner");
+    // The workspace and the owner's role are FeltKit's.
+    assert.deepEqual((await t.tenancy!.tenantsFor(ADA.id)).map((w) => [w.id, w.name, w.role]), [[ws, "Acme", "owner"]]);
+    const w = await ada.query(api.workspaces.get, {});
+    assert.deepEqual([w.id, w.name, w.myRole], [ws, "Acme", "owner"]);
+    assert.deepEqual(w.members.map((m: any) => m.handle).sort(), ["ada", "grace"]);
     const names = (await ada.query(api.channels.list, { workspaceId: ws })).map((c: any) => c.name).sort();
     assert.deepEqual(names, ["general", "random"]);
     const log = await ada.query(api.activity.list, { workspaceId: ws });
@@ -107,7 +109,9 @@ test("upload an attachment, send it, download it", async () => {
 test("add agent, mention it, agent action persists a project plan and posts a reference", async () => {
   const { t, ada, ws } = await setup();
   try {
-    await ada.mutation(api.agents.add, { workspaceId: ws });
+    // The agent is a FeltKit member of the workspace (role "agent"), added directly as an agent identity.
+    const agent = await addAgent(t, ws);
+    assert.equal((await t.tenancy!.membership(ws, "assistant"))?.role, "agent");
     const ch = await ada.mutation(api.channels.create, { workspaceId: ws, name: "launch", kind: "public", topic: "Q1 launch" });
     await ada.mutation(api.messages.send, { channelId: ch, text: "Goal: ship the beta by March 14." });
     await ada.mutation(api.messages.send, { channelId: ch, text: "Decided: per-seat pricing." });
@@ -117,7 +121,7 @@ test("add agent, mention it, agent action persists a project plan and posts a re
     assert.deepEqual((await ada.query(api.agents.requests, { channelId: ch })).map((r: any) => r.status), ["pending"]);
 
     const { workQueue } = await import("../agent/worker.js");
-    const result = await workQueue(t.as(AGENT));
+    const result = await workQueue(agent);
     assert.deepEqual(result, { handled: 1, failed: 0, skipped: 0 });
 
     const [req] = await ada.query(api.agents.requests, { channelId: ch });
@@ -134,28 +138,69 @@ test("add agent, mention it, agent action persists a project plan and posts a re
     assert.equal((await ada.query(api.agents.plans, { workspaceId: ws })).length, 1);
     const log = await ada.query(api.activity.list, { workspaceId: ws });
     assert.ok(log.some((a: any) => a.type === "agent.plan.created"));
-    assert.equal((await t.as(AGENT).query(api.agents.pending)).length, 0, "nothing left to do");
+    assert.equal((await agent.query(api.agents.pending)).length, 0, "nothing left to do");
   } finally { await t.close(); }
 });
 
 test("state survives a restart (durable recovery)", async () => {
-  const { t, ada, general } = await setup();
+  const { t, ada, general, ws } = await setup();
   try {
     await ada.mutation(api.messages.send, { channelId: general, text: "durable" });
     await t.restart();
-    assert.equal((await t.as("ada").query(api.messages.list, { channelId: general })).items[0].text, "durable");
+    const again = t.as(ADA, { tenant: ws });
+    assert.equal((await again.query(api.messages.list, { channelId: general })).items[0].text, "durable");
+    assert.equal((await t.tenancy!.membership(ws, GRACE.id))?.role, "member", "memberships are durable too");
   } finally { await t.close(); }
 });
 
 test("the sample workspace is real, persisted and complete", async () => {
-  const { t, grace } = await setup();
+  const { t } = await setup();
   try {
-    const ws = await grace.mutation(api.demo.create, {});
+    // What the client does: create the workspace (FeltKit), add the room agent (FeltKit), seed it.
+    const ws = (await t.tenancy!.create("Northwind Labs", GRACE)).id;
+    const grace = t.as(GRACE, { tenant: ws });
+    await grace.mutation(api.me.ensure, {});
+    await t.tenancy!.addPrincipal({ ...(await t.tenancy!.context(ws, GRACE.id))!, principalId: GRACE.id }, { id: "assistant", type: "agent" }, "agent");
+    assert.equal(await grace.mutation(api.demo.seed, {}), ws);
     const w = await grace.query(api.workspaces.get, { workspaceId: ws });
-    assert.equal(w.myRole, "owner");
+    assert.deepEqual([w.name, w.myRole], ["Northwind Labs", "owner"]);
     assert.ok(w.members.some((m: any) => m.handle === "assistant" && m.kind === "agent"));
     const chans = await grace.query(api.channels.list, { workspaceId: ws });
     assert.deepEqual(chans.filter((c: any) => c.kind !== "dm").map((c: any) => c.name).sort(), ["design-crit", "general", "launch-q1", "random"]);
     assert.equal(chans.find((c: any) => c.kind === "dm")!.unread, 1);
+    assert.equal(chans.find((c: any) => c.name === "general")!.isMember, true);
+    // Only into an empty workspace.
+    await assert.rejects(grace.mutation(api.demo.seed, {}), { code: "FAILED_PRECONDITION" });
   } finally { await t.close(); }
+});
+
+test("the external room agent lists its workspaces over HTTP and works each one's queue", async () => {
+  const { t, ada, ws, general, mallory, malloryWs } = await setup();
+  const http = await serve(t);
+  try {
+    // An operator issues the agent its identity (feltkit session create --type agent); admins add it.
+    const issued = await t.runtime.issueSession({ id: "assistant", type: "agent", roles: ["agent"], displayName: "Assistant" }, { kind: "cli", via: "cli" });
+    const owner = await http.signIn("ada", ws);
+    await owner.addMember("assistant", "agent");
+    await ada.mutation(api.agents.add, {});
+    await t.tenancy!.addPrincipal(await actor(t, malloryWs, MALLORY), AGENT, "agent");
+    await mallory.mutation(api.agents.add, {});
+    const evil = (await mallory.query(api.channels.list, {})).find((c: any) => c.name === "general")!.id;
+    await ada.mutation(api.messages.send, { channelId: general, text: "@assistant summarize this" });
+    await mallory.mutation(api.messages.send, { channelId: evil, text: "@assistant summarize ours" });
+    const { createClient } = await import("@feltdb/feltkit/client");
+    let token: string | null = issued.token;
+    const client = createClient({ url: http.url, tokens: { get: () => token, set: (v) => { token = v; } } });
+    const { workEveryWorkspace } = await import("../agent/worker.js");
+    assert.deepEqual(await workEveryWorkspace(client), { handled: 2, failed: 0, skipped: 0, workspaces: 2 });
+    assert.notEqual(token, issued.token, "switching rotated the session");
+    for (const [who, ch] of [[ada, general], [mallory, evil]] as const) {
+      const [top] = (await who.query(api.messages.list, { channelId: ch })).items;
+      assert.equal((await who.query(api.messages.thread, { rootId: top.id })).replies[0].author.handle, "assistant");
+    }
+    // Removed from Acme, the agent no longer lists or works it.
+    await owner.removeMember("assistant");
+    await ada.mutation(api.messages.send, { channelId: general, text: "@assistant again?" });
+    assert.deepEqual(await workEveryWorkspace(client), { handled: 0, failed: 0, skipped: 0, workspaces: 1 });
+  } finally { await http.close(); await t.close(); }
 });

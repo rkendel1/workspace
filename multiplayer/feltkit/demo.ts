@@ -1,14 +1,16 @@
-import { s } from "@feltdb/feltkit";
-import { app, channels, participants, reactions, workspaces } from "./app.js";
-import { me } from "./_authz.js";
-import { addToWorkspace, ensureRoomAgent, insertMessage, joinChannel } from "./_ops.js";
+import { fail, s } from "@feltdb/feltkit";
+import { app, channels, messages, participants, reactions } from "./app.js";
+import { loadWorkspace } from "./_authz.js";
+import { enterWorkspace, ensureRoomAgent, insertMessage, joinChannel } from "./_ops.js";
 import { record } from "./_util.js";
 
 /**
- * Onboarding: "Explore a sample workspace". Creates a real workspace (persisted, flagged demo) with
- * sample colleagues (personas: participants with no principal, so nobody can sign in as them), an
- * ongoing launch discussion, a thread, reactions, a private channel, a DM, and the room agent.
- * The caller is its owner; everything in it works like any other workspace.
+ * Onboarding: "Explore a sample workspace". The client creates a real workspace (a FeltKit tenant,
+ * client.createTenant("Northwind Labs")), adds the room agent to it (client.addMember), and calls
+ * this in it: sample colleagues (personas: participants with no principal, so nobody can sign in as
+ * them, listed in the workspace directory), an ongoing launch discussion, a thread, reactions, a
+ * private channel, a DM, and the room agent in the directory. The caller (its owner) is the only real
+ * member; everything in it works like any other workspace. Only into an empty workspace.
  */
 const PEOPLE = [
   { handle: "maya", displayName: "Maya Chen", title: "Product lead" },
@@ -33,29 +35,32 @@ const LAUNCH: Array<[Who, string]> = [
   ["maya", "Open question: do we invite existing customers first or open the waitlist?"],
 ];
 
-export const create = app.mutation({
+export const seed = app.mutation({
   access: "workspaces.write",
+  args: { workspaceId: s.optional(s.string()) },
   returns: s.string(),
   handler: async (ctx) => {
-    const owner = await me(ctx);
+    const { participant: owner, workspaceId: ws, role } = await loadWorkspace(ctx);
+    if ((await ctx.db.query(messages, { where: [], limit: 1 })).records.length) fail("FAILED_PRECONDITION", "The sample conversation goes into an empty workspace only.");
     const now = Date.now();
-    const ws = await ctx.db.insert(workspaces, { name: "Northwind Labs", description: "Sample workspace: the team behind Multiplayer Teams", createdBy: owner.id, createdAt: now, demo: true });
     const ids = {} as Record<Who, string>;
     for (const p of PEOPLE) {
       const [existing] = await ctx.db.find(participants, { principalId: `persona:${p.handle}` });
       ids[p.handle] = existing?.id ?? (await ctx.db.insert(participants, { principalId: `persona:${p.handle}`, kind: "human", handle: p.handle, displayName: p.displayName, title: p.title, persona: true, createdAt: now }));
     }
-    const ch = async (name: string, kind: "public" | "private", topic: string, isDefault = false) =>
-      ctx.db.insert(channels, { workspaceId: ws, kind, name, topic, createdBy: ids.maya, createdAt: now, ...(isDefault ? { isDefault: true } : {}) });
+    const ch = async (name: string, kind: "public" | "private", topic: string, isDefault = false) => {
+      const [existing] = await ctx.db.find(channels, { name });
+      return existing?.id ?? ctx.db.insert(channels, { workspaceId: ws, kind, name, topic, createdBy: ids.maya, createdAt: now, ...(isDefault ? { isDefault: true } : {}) });
+    };
     const general = await ch("general", "public", "Company-wide announcements and work-based matters", true);
     const random = await ch("random", "public", "Non-work banter and water cooler conversation", true);
     const launch = await ch("launch-q1", "public", "Q1 launch of Multiplayer Teams · beta March 14");
     const design = await ch("design-crit", "private", "Work-in-progress design reviews");
 
-    await addToWorkspace(ctx, ws, owner.id, "owner");
-    for (const p of PEOPLE) await addToWorkspace(ctx, ws, ids[p.handle], p.handle === "maya" ? "admin" : "member");
-    const agentId = await ensureRoomAgent(ctx);
-    await addToWorkspace(ctx, ws, agentId, "agent", owner.id);
+    await enterWorkspace(ctx, ws, owner.id, role);
+    for (const pid of [owner.id, ...PEOPLE.map((p) => ids[p.handle])]) for (const c of [general, random]) await joinChannel(ctx, ws, c, pid);
+    for (const p of PEOPLE) await enterWorkspace(ctx, ws, ids[p.handle], "member");
+    await enterWorkspace(ctx, ws, await ensureRoomAgent(ctx), "agent");
     for (const pid of [owner.id, ids.maya, ids.jonas, ids.priya, ids.sam]) await joinChannel(ctx, ws, launch, pid);
     for (const pid of [owner.id, ids.priya, ids.maya]) await joinChannel(ctx, ws, design, pid);
 
@@ -83,7 +88,7 @@ export const create = app.mutation({
     const dm = await ctx.db.insert(channels, { workspaceId: ws, kind: "dm", name: "dm", dmKey: dmIds.join(","), createdBy: ids.maya, createdAt: now });
     for (const pid of dmIds) await joinChannel(ctx, ws, dm, pid);
     await post(dm, "maya", "Hey! Could you take a look at #launch-q1 and ask @assistant to summarize it into a project plan?");
-    await record(ctx, ws, owner.id, "workspace.created", `${owner.displayName} created the sample workspace`, ws);
+    await record(ctx, ws, owner.id, "workspace.created", `${owner.displayName} set up the sample workspace`, ws);
     return ws;
   },
 });

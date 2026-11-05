@@ -1,109 +1,96 @@
 import { useEffect, useRef, useState } from "react";
-import { useConnectionState, useFeltKit, useMutation, useQueryState, useSession } from "@feltdb/feltkit/react";
+import {
+  AcceptInvitation, CreateTenant, SignIn,
+  useAuth, useAuthRedirect, useConnectionState, useFeltKit, useMutation, useQueryState, useTenant,
+} from "@feltdb/feltkit/react";
 import { api } from "../feltkit/_generated/api";
-import { describe, ResetForm, SignedOut } from "./auth";
-import { Onboarding } from "./Onboarding";
 import { WorkspaceView } from "./Workspace";
 import { Toasts, useToasts } from "./ui";
 
-/** The shell: session, profile, invitation links, then the workspace. */
+/**
+ * The shell. Sign-in, invitation links, workspaces (FeltKit tenants), members and accounts are
+ * FeltKit's (`@feltdb/feltkit/react`); the browser session is FeltKit's HttpOnly cookie. This file
+ * decides which screen shows, and enters the current workspace (me:ensure) before showing it.
+ */
 export function App() {
-  const { session, signInAsDevUser, signIn, signUp, signOut } = useSession();
+  const auth = useAuth();
+  const tenant = useTenant();
   const client = useFeltKit();
+  const { redirect } = useAuthRedirect();
   const live = useConnectionState();
   const toasts = useToasts();
-  const principal = session?.principal ?? null;
-  const [resetToken, setResetToken] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState(false);
 
-  useEffect(() => {
-    void client.handleRedirect().then((r) => {
-      if (r?.kind === "reset") setResetToken(r.token);
-      else if (r?.kind === "error" || r?.kind === "verify-failed") toasts.error(r.message);
-    });
-  }, [client]);
-
-  // Development: sign in as the identity in ?as=… (two windows, two people), else the first dev user.
+  // Development: ?as=<dev user> signs this browser in as that identity (two windows, two people).
   const tried = useRef(false);
   useEffect(() => {
-    if (session && !principal && session.devUsers.length && !tried.current) {
-      tried.current = true;
-      const wanted = new URLSearchParams(location.search).get("as");
-      const user = session.devUsers.find((u) => u.id === wanted) ?? session.devUsers[0]!;
-      void signInAsDevUser(user.id).catch(toasts.error);
-    }
-  }, [session, principal, signInAsDevUser]);
+    const wanted = new URLSearchParams(location.search).get("as");
+    if (!auth.session || tried.current || !wanted || auth.user?.id === wanted) return;
+    if (!auth.session.devUsers?.some((u) => u.id === wanted)) return;
+    tried.current = true;
+    void client.signInAsDevUser(wanted).catch(toasts.error);
+  }, [auth.session, auth.user?.id]);
 
-  if (!session) return <div className="center muted" role="status">Connecting…</div>;
-  if (resetToken) return <div className="center"><div className="card narrow"><ResetForm token={resetToken} onDone={() => setResetToken(null)} /></div></div>;
-  if (!principal) {
-    return (
-      <div className="signed-out">
-        <div className="brand-hero"><Logo /> <span>Multiplayer</span></div>
-        <SignedOut devUsers={session.devUsers} accounts={session.accounts ?? null} onDevSignIn={(id) => void signInAsDevUser(id).catch(toasts.error)} onSignIn={signIn} onSignUp={signUp} />
-        <Toasts {...toasts} />
-      </div>
-    );
-  }
+  const brand = { name: "Multiplayer", logo: "/logo.svg" };
+  if (auth.loading) return <div className="center muted" role="status">Connecting…</div>;
+  // An invitation link: FeltKit shows it, asks to sign in first if needed, and switches to the workspace.
+  if (redirect?.kind === "invitation") return <div className="signed-out"><AcceptInvitation brand={brand} onAccepted={() => toasts.info("You joined the workspace.")} /><Toasts {...toasts} /></div>;
+  if (!auth.user) return <div className="signed-out"><SignIn brand={brand} /><Toasts {...toasts} /></div>;
+  if (seeding || tenant.loading) return <div className="center muted" role="status">{seeding ? "Setting up the sample workspace…" : "Loading your workspaces…"}</div>;
+  if (!tenant.current) return <><Onboarding onSeeding={setSeeding} toasts={toasts} /><Toasts {...toasts} /></>;
   return (
     <>
-      <Signed key={principal.id} live={live} devUsers={session.devUsers} principalId={principal.id} onSwitch={(id) => void (id ? signInAsDevUser(id) : signOut()).catch(toasts.error)} onSignOut={() => void signOut()} toasts={toasts} />
+      <Enter key={`${auth.user.id}:${tenant.current.id}`} workspaceId={tenant.current.id} live={live} toasts={toasts} />
       <Toasts {...toasts} />
     </>
   );
 }
 
-function Signed(props: { live: boolean; devUsers: Array<{ id: string; name: string }>; principalId: string; onSwitch: (id: string) => void; onSignOut: () => void; toasts: ReturnType<typeof useToasts> }) {
-  const me = useQueryState(api.me.get);
+/** Enter the session's workspace (profile, directory, default channels), then show it. */
+function Enter(props: { workspaceId: string; live: boolean; toasts: ReturnType<typeof useToasts> }) {
   const ensure = useMutation(api.me.ensure);
-  const accept = useMutation(api.invitations.accept);
-  const [chosen, setChosen] = useState<string | null>(() => sessionStorage.getItem("mp:ws"));
-  const [picker, setPicker] = useState(false);
-  const invite = new URLSearchParams(location.search).get("invite");
+  const me = useQueryState(api.me.get);
+  const [entered, setEntered] = useState(false);
+  useEffect(() => { void ensure({}).then(() => setEntered(true), props.toasts.error); }, []);
+  if (me.error) return <div className="center"><div className="card narrow error-text" role="alert">{me.error.message}</div></div>;
+  if (!entered || !me.data) return <div className="center muted" role="status">Opening the workspace…</div>;
+  return <WorkspaceView workspaceId={props.workspaceId} me={me.data.participant} live={props.live} toasts={props.toasts} />;
+}
 
-  // First visit: create the participant profile for this principal.
-  useEffect(() => {
-    if (me.data === null) void ensure({}).catch(props.toasts.error);
-  }, [me.data]);
-
-  const workspaces = me.data?.workspaces ?? [];
-  // The chosen workspace if the caller still belongs to it, else their first one (no picker flash).
-  const workspaceId = chosen && workspaces.some((w) => w.id === chosen) ? chosen : workspaces[0]?.id ?? null;
-  const setWorkspaceId = (id: string | null) => {
-    setPicker(id === null);
-    if (id) { setChosen(id); sessionStorage.setItem("mp:ws", id); }
-  };
-
-  if (me.error) return <div className="center"><div className="card narrow error-text" role="alert">{describe(me.error)}</div></div>;
-  if (!me.data) return <div className="center muted" role="status">Loading your workspaces…</div>;
-
-  const acceptInvite = async (code: string) => {
+/** No workspace yet (or none chosen): FeltKit's CreateTenant, and the sample workspace. */
+function Onboarding({ onSeeding, toasts }: { onSeeding: (on: boolean) => void; toasts: ReturnType<typeof useToasts> }) {
+  const client = useFeltKit();
+  const auth = useAuth();
+  const sample = async () => {
+    onSeeding(true);
     try {
-      const ws = await accept({ code });
-      history.replaceState(null, "", location.pathname + (new URLSearchParams(location.search).get("as") ? `?as=${new URLSearchParams(location.search).get("as")}` : ""));
-      setWorkspaceId(ws);
-      props.toasts.info("You joined the workspace.");
+      await client.createTenant("Northwind Labs");
+      // The room agent joins as a FeltKit member (an agent identity: a dev user here, an operator-issued session in production).
+      await client.addMember("assistant", "agent").catch((e) => toasts.error(`@assistant could not be added: ${e.message}`));
+      await client.mutation(api.me.ensure, {});
+      await client.mutation(api.demo.seed, {});
     } catch (e) {
-      props.toasts.error(e);
+      toasts.error(e);
+    } finally {
+      onSeeding(false);
     }
   };
-
-  if (!workspaceId || invite || picker) {
-    return <Onboarding me={me.data.participant} workspaces={workspaces} invite={invite} onAccept={acceptInvite} onOpen={setWorkspaceId} onError={props.toasts.error} onSignOut={props.onSignOut} />;
-  }
   return (
-    <WorkspaceView
-      key={workspaceId}
-      workspaceId={workspaceId}
-      me={me.data.participant}
-      workspaces={workspaces}
-      live={props.live}
-      devUsers={props.devUsers}
-      principalId={props.principalId}
-      onSwitchUser={props.onSwitch}
-      onSwitchWorkspace={(id) => setWorkspaceId(id)}
-      onSignOut={props.onSignOut}
-      toasts={props.toasts}
-    />
+    <main className="onboarding">
+      <div className="onboarding-card">
+        <div className="brand-hero"><Logo size={34} /> <span>Multiplayer</span></div>
+        <p className="lead">Hi {(auth.user?.displayName ?? "there").split(" ")[0]} — workspaces are where your team and your agents work together.</p>
+        <CreateTenant title="Your workspaces" className="embedded" />
+        <section className="demo-box">
+          <div>
+            <h2>Explore a sample workspace</h2>
+            <p className="muted">Northwind Labs: four colleagues mid-way through planning a launch, a private channel, a DM waiting for you, and the @assistant room agent.</p>
+          </div>
+          <button className="secondary" onClick={() => void sample()}>Open sample workspace</button>
+        </section>
+        <p className="muted small"><button className="link" onClick={() => void auth.signOut()}>Sign out</button></p>
+      </div>
+    </main>
   );
 }
 
